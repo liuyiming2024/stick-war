@@ -22,12 +22,13 @@ src/render.js    src/ui.js
  Canvas 绘制      数值 / 按钮 / 面板 / 队列条 / toast 同步
    ▲
    │
-src/assets.js    素材、白色剪影贴图、超时降级
+src/figure.js    矢量骨骼角色（只吃数字、不读状态）
+src/assets.js    场地素材、超时降级
 ```
 
 `src/main.js` 只做装配：创建 state / rng / assets / renderer / ui，用 `src/timing.js` 的固定步长累加器驱动 `step`，每帧调一次 `renderer.draw` 和 `ui.sync`。
 
-**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 40 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层（比如换 WebGL）时逻辑不用重写的前提。
+**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 43 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层（比如换 WebGL）时逻辑不用重写的前提。
 
 ## 时间与确定性
 
@@ -82,13 +83,14 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 
 ## 扩展点
 
-- **加兵种**：`config/game.json` 加一项（必填 `trainSec`）+ `assets/<key>.webp` + manifest → `npm run check`。兵种栏、商店、升级面板、训练队列、AI 抽取池由配置自动生成。
+- **加兵种**：`config/game.json` 加一项（必填 `trainSec`）→ `npm run check`，再在 `src/figure.js` 的 `BULK` 表、头饰分支、武器分支各补一条。兵种栏、商店、升级面板、训练队列、AI 抽取池由配置自动生成，角色也不需要额外贴图。
 - **加投射物类型**：`simulation.js` 的 `fire()` / `makeProjectile()` 决定生成，`render.js` 的 `drawProjectile()` 决定外观；`build-config` 校验 `projectile` 取值。
 - **加克制关系**：`damageMultiplier()` + `config/game.json` 的 `damageMatrix`，拆雕像分支另行读取。
 - **换 AI 策略**：只改 `tryAiSpawn()` / `aiInterval()`，它们是纯逻辑，可直接写单测。当前 AI 不做针对性反制。
 - **加难度项**：`match.difficulties` 加字段后在 `difficultyOf()` 消费。
 - **加音效 / 存档**：消费 `step()` 的 `events`（`hit` / `gold` / `training` / `trained` / `fortArrow` / `spawn` / `statueHit` / `end`），不要在渲染层偷偷改状态。
-- **换渲染层**：`renderer` 只依赖 `state` 与 `assets` 两个只读对象。
+- **换渲染层**：`renderer` 只依赖 `state` 与 `assets` 两个只读对象；角色本身由 `figure.js` 的 `drawUnitFigure(ctx, { type, team, x, groundY, height, ... })` 单独绘制，换 WebGL 时只需重写这一层。
+- **调角色**：`src/figure.js` 里所有长度都以「身高 = 1」为单位，改完全身等比缩放；动作参数（步幅、攻击相位、受击后仰）也在同一处。
 
 ## 测试策略
 
@@ -98,6 +100,7 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 | `tests/simulation.test.mjs` | dt 线性一致、矿工经济与 dt 结转、双侧矿点分配、胜负状态机、AI 约束与解锁、雕像判定线、投射物命中/落空、统计、升级与重开 |
 | `tests/config.test.mjs` | 生成物无漂移、字段合法、双侧矿点结构、素材超时、单位约定 |
 | `tests/mechanics.test.mjs` | 训练队列/退款/升级快照/人口、三指令与驻堡、城堡射手、克制倍率、被动收入、矿工 Armory、难度 |
+| `tests/figure.test.mjs` | 7 兵种 × 7 种动作的几何回归：stub ctx 记账，出现 NaN 坐标直接失败 |
 | `scripts/smoke-pages.mjs` | 41 项页面可达性（进入/退出/×/Esc/遮罩/训练队列/难度/资源 200/无运行时异常） |
 
 CI 另外做全模块语法检查、素材字节数与 WebP 尺寸校验、导航退出通道静态自检、Pages 入口自检。Playwright 烟测需要本机 Chrome，CI 不跑（用静态自检兜底）。

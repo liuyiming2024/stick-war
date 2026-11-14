@@ -3,7 +3,7 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "subtitle": "训练队列 · 三指令 · 城堡射手 · 原版克制"
   },
   "layout": {

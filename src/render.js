@@ -1,4 +1,5 @@
 import { CONFIG } from './config.js';
+import { drawUnitFigure } from './figure.js';
 
 const C = CONFIG;
 const P = C.presentation;
@@ -17,45 +18,6 @@ function bgRectFor(img, w, h) {
   let dw, dh;
   if (cr > ir) { dw = w; dh = w / ir; } else { dh = h; dw = h * ir; }
   return { x: (w - dw) / 2, y: (h - dh) / 2, dw, dh };
-}
-
-// 素材缺失时的真实降级绘制：火柴人线稿 + 兵种区分，而不是直接隐形。
-function drawStickFigure(ctx, key, cx, groundY, hgt, color, swing) {
-  const headR = hgt * 0.11;
-  const headY = groundY - hgt + headR;
-  const shoulderY = headY + headR * 1.7;
-  const hipY = groundY - hgt * 0.42;
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(2, hgt * 0.045);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.arc(cx, headY, headR, 0, Math.PI * 2);
-  ctx.moveTo(cx, headY + headR); ctx.lineTo(cx, hipY);
-  ctx.moveTo(cx, shoulderY); ctx.lineTo(cx - hgt * 0.14, hipY + hgt * 0.06);
-  ctx.moveTo(cx, shoulderY); ctx.lineTo(cx + hgt * 0.14, hipY + hgt * 0.06);
-  ctx.moveTo(cx, hipY); ctx.lineTo(cx - hgt * 0.13, groundY);
-  ctx.moveTo(cx, hipY); ctx.lineTo(cx + hgt * 0.13, groundY);
-  ctx.stroke();
-  // 武器 / 工种标识
-  ctx.lineWidth = Math.max(2, hgt * 0.035);
-  ctx.beginPath();
-  if (key === 'sword' || key === 'spear') {
-    const len = key === 'spear' ? hgt * 0.55 : hgt * 0.38;
-    ctx.moveTo(cx + hgt * 0.12, shoulderY);
-    ctx.lineTo(cx + hgt * 0.12 + Math.cos(swing) * len, shoulderY - Math.sin(swing) * len);
-  } else if (key === 'archer') {
-    ctx.arc(cx + hgt * 0.18, shoulderY + hgt * 0.06, hgt * 0.18, -Math.PI / 2, Math.PI / 2);
-  } else if (key === 'wizard') {
-    ctx.arc(cx + hgt * 0.17, shoulderY - hgt * 0.12, hgt * 0.09, 0, Math.PI * 2);
-  } else if (key === 'miner') {
-    ctx.moveTo(cx + hgt * 0.1, shoulderY); ctx.lineTo(cx + hgt * 0.26, shoulderY + hgt * 0.16);
-  } else if (key === 'giant') {
-    ctx.lineWidth = Math.max(3, hgt * 0.06);
-    ctx.moveTo(cx - hgt * 0.2, shoulderY); ctx.lineTo(cx + hgt * 0.2, shoulderY);
-  }
-  ctx.stroke();
-  ctx.restore();
 }
 
 export function createRenderer(canvas) {
@@ -250,80 +212,168 @@ export function createRenderer(canvas) {
     }
   }
 
-  function drawSprite(state, assets, key, cx, groundY, hgt, faceLeft, swing) {
-    const img = assets.get(key);
-    if (!img) {
-      drawStickFigure(ctx, key, cx, groundY, hgt,
-        faceLeft ? P.enemyColor : P.playerColor, swing);
-      return null;
+  // 逐单位的动作记忆：走路相位、步频、上一次攻击计时。
+  // 全部是渲染侧状态，物理层完全不知道它的存在。
+  const motion = new Map();
+  const fx = [];
+  let lastClock = 0;
+
+  function spawnFx(x, y, n, opt) {
+    for (let i = 0; i < n; i++) {
+      const a = opt.dir !== undefined ? opt.dir + (Math.random() - 0.5) * opt.spread : Math.random() * Math.PI * 2;
+      const sp = opt.speed * (0.6 + Math.random() * 0.7);
+      fx.push({
+        x: x + (Math.random() - 0.5) * opt.jitter,
+        y: y + (Math.random() - 0.5) * opt.jitter,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - (opt.lift ?? 0),
+        g: opt.gravity ?? 0,
+        life: 0,
+        max: opt.life * (0.75 + Math.random() * 0.5),
+        r: opt.size * (0.7 + Math.random() * 0.6),
+        color: opt.color,
+        glow: !!opt.glow,
+      });
     }
-    const dw = hgt * (img.naturalWidth / img.naturalHeight);
-    ctx.save();
-    ctx.translate(cx, groundY);
-    if (faceLeft) ctx.scale(-1, 1);
-    ctx.drawImage(img, -dw / 2, -hgt, dw, hgt);
-    ctx.restore();
-    return { img, dw, x: cx - dw / 2, y: groundY - hgt };
+    if (fx.length > 160) fx.splice(0, fx.length - 160);
   }
 
-  function drawUnit(state, assets, u) {
+  function updateFx(dt) {
+    for (const p of fx) {
+      p.life += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += (p.g ?? 0) * dt;
+      p.vx *= 0.92;
+      p.vy *= 0.92;
+    }
+    for (let i = fx.length - 1; i >= 0; i--) if (fx[i].life >= fx[i].max) fx.splice(i, 1);
+  }
+
+  function drawFx() {
+    for (const p of fx) {
+      const k = 1 - p.life / p.max;
+      ctx.save();
+      ctx.globalAlpha = (p.glow ? 0.7 : 0.5) * k;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (1.25 - k * 0.25), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function tick(state) {
+    let dt = state.elapsed - lastClock;
+    if (dt < 0) {
+      // 重开对局：对局时钟归零，渲染侧的动作记忆也跟着清空，别让上一局的相位残留
+      motion.clear();
+      fx.length = 0;
+      dt = 0;
+    }
+    dt = Math.min(C.match.maxFrameDelta, dt);
+    lastClock = state.elapsed;
+    updateMotion(state, dt);
+    updateFx(dt);
+  }
+
+  function updateMotion(state, dt) {
+    for (const u of state.units) {
+      const hgt = unitHeight(state, u);
+      let rec = motion.get(u.id);
+      if (!rec) {
+        rec = { x: u.x, walk: 0, phase: 0, stepAt: 0, atkPrev: 0, hitPrev: 0 };
+        motion.set(u.id, rec);
+      }
+      const dx = u.x - rec.x;
+      rec.x = u.x;
+      const moved = Math.abs(dx) > Math.max(0.5, hgt * 0.006);
+      rec.walk += ((moved ? 1 : 0) - rec.walk) * Math.min(1, dt * 9);
+
+      if (moved && dt > 0) {
+        rec.phase += Math.abs(dx) / (hgt * 0.36) * Math.PI;
+        const step = Math.floor(rec.phase / Math.PI);
+        if (step !== rec.stepAt) {
+          rec.stepAt = step;
+          spawnFx(u.x - Math.sign(dx) * hgt * 0.03, u.y - 1, 2, {
+            dir: Math.PI + Math.sign(dx) * 0.4, spread: 0.7, speed: hgt * 0.05,
+            life: 0.42, size: hgt * 0.022, jitter: hgt * 0.02, lift: hgt * 0.04,
+            color: 'rgba(223,214,188,.5)',
+          });
+        }
+      }
+
+      // 新的一次攻击：脚下起一圈土，武器挥动交给 figure 层
+      const atkFresh = u.atkAnim > rec.atkPrev + 1e-4;
+      if (atkFresh) {
+        spawnFx(u.x, u.y - 1, 3, {
+          dir: Math.PI / 2, spread: 2.4, speed: hgt * 0.10, life: 0.4,
+          size: hgt * 0.018, jitter: hgt * 0.05, lift: hgt * 0.02,
+          color: u.team === 0 ? 'rgba(120,205,120,.45)' : 'rgba(225,120,120,.45)',
+        });
+      }
+      if (u.hitFlash > rec.hitPrev + 1e-4) {
+        const cy = u.y - hgt * 0.62;
+        spawnFx(u.x, cy, 3, {
+          dir: Math.PI / 2, spread: 1.6, speed: hgt * 0.14, life: 0.26,
+          size: hgt * 0.014, jitter: hgt * 0.06, lift: 0,
+          color: 'rgba(255,255,255,.85)', glow: true,
+        });
+      }
+      rec.atkPrev = u.atkAnim;
+      rec.hitPrev = u.hitFlash;
+    }
+    if (motion.size > state.units.length + 30) {
+      const alive = new Set(state.units.map((u) => u.id));
+      for (const id of motion.keys()) if (!alive.has(id)) motion.delete(id);
+    }
+  }
+
+  function drawUnit(state, u) {
     const hgt = unitHeight(state, u);
     const gy = u.y;
-    const faceLeft = u.team === 1;
-    const lunge = u.atkAnim > 0 ? (u.team === 0 ? 7 : -7) : 0;
-    const bob = Math.sin(u.anim * 9) * hgt * 0.012;
-    const color = u.team === 0 ? P.playerColor : P.enemyColor;
+    const rec = motion.get(u.id) ?? { walk: 0, phase: 0 };
+    const atk = u.atkAnim > 0 ? 1 - u.atkAnim / C.combat.attackAnimSec : 0;
+    const flash = u.hitFlash > 0 ? u.hitFlash / C.combat.hitFlashSec : 0;
+    const carry = u.carry ?? 0;
 
+    // 脚下投影
     ctx.save();
-    ctx.fillStyle = u.team === 0 ? 'rgba(63,174,75,.30)' : 'rgba(212,58,58,.28)';
-    ctx.beginPath(); ctx.ellipse(u.x, gy - 2, hgt * 0.2, hgt * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = u.team === 0 ? 'rgba(63,174,75,.28)' : 'rgba(212,58,58,.26)';
+    ctx.beginPath(); ctx.ellipse(u.x, gy - 1, hgt * 0.16, hgt * 0.04, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 
-    const placed = drawSprite(state, assets, u.type, u.x + lunge, gy + 1 - bob, hgt, faceLeft,
-      u.atkAnim > 0 ? 0.9 : 0.25);
+    const opts = {
+      type: u.type, team: u.team, x: u.x, groundY: gy + 1, height: hgt,
+      faceLeft: u.team === 1, t: u.anim,
+      atk, walkAmt: rec.walk, walkPhase: rec.phase,
+      job: u.kind === 'miner' ? u.job : '', carry,
+      rockVisible: u.type === 'stone' && atk < 0.18,
+      flash,
+    };
+    drawUnitFigure(ctx, opts);
 
-    // 受击闪白：用预生成的白色剪影叠加，避免每帧 ctx.filter。
-    if (u.hitFlash > 0) {
-      const alpha = (u.hitFlash / C.combat.hitFlashSec) * P.flashAlpha;
-      const flash = assets.flash(u.type);
+    // 受击闪白：同一副骨架画成纯白剪影，不再依赖预生成贴图
+    if (flash > 0) {
       ctx.save();
-      ctx.globalAlpha = alpha;
-      if (flash && placed) {
-        ctx.drawImage(flash, placed.x, placed.y, placed.dw, hgt);
-      } else {
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(u.x, gy - hgt * 0.55, hgt * 0.16, 0, Math.PI * 2); ctx.fill();
-      }
+      ctx.globalAlpha = flash * P.flashAlpha;
+      drawUnitFigure(ctx, { ...opts, white: true, t: u.anim + 0.01 });
       ctx.restore();
     }
 
     const bw = Math.max(26, hgt * 0.55);
-    const by = gy - hgt - 11;
+    const by = gy - hgt - 8;
     ctx.fillStyle = 'rgba(0,0,0,.55)';
     ctx.fillRect(u.x - bw / 2, by, bw, 4);
-    ctx.fillStyle = color;
+    ctx.fillStyle = u.team === 0 ? P.playerColor : P.enemyColor;
     ctx.fillRect(u.x - bw / 2, by, bw * Math.max(0, u.hp / u.maxHp), 4);
 
-    if (u.kind === 'miner') {
-      if (u.carry > 0) {
-        ctx.fillStyle = P.goldColor;
-        ctx.fillRect(u.x - 4, gy - hgt * 0.45, 8, 8);
-      }
-      if (u.job === 'mining') {
-        const p = 1 - Math.max(0, u.mineTimer) / C.economy.mineDurationSec;
-        ctx.save();
-        ctx.strokeStyle = P.goldColor; ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(u.x, gy - hgt - 20, 7, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2);
-        ctx.stroke(); ctx.restore();
-      }
-    } else if (u.atkAnim > 0 && !u.projectile) {
+    if (u.kind === 'miner' && u.job === 'mining') {
+      const p = 1 - Math.max(0, u.mineTimer) / C.economy.mineDurationSec;
       ctx.save();
-      ctx.strokeStyle = u.team === 0 ? 'rgba(255,255,255,.75)' : 'rgba(255,200,200,.75)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = P.goldColor; ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(u.x + (faceLeft ? -8 : 8), gy - hgt * 0.62, hgt * 0.34,
-        -Math.PI / 3, Math.PI / 3);
+      ctx.arc(u.x, gy - hgt - 17, 7, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2);
       ctx.stroke(); ctx.restore();
     }
   }
@@ -357,10 +407,12 @@ export function createRenderer(canvas) {
     drawFort(state);
     drawStatues(state, assets);
     drawMines(state);
+    tick(state);
     // 复制后再排序：渲染顺序不再改写物理数组。
     const sorted = [...state.units].sort((a, b) => a.x - b.x);
-    for (const u of sorted) drawUnit(state, assets, u);
+    for (const u of sorted) drawUnit(state, u);
     for (const p of state.projectiles) drawProjectile(state, p);
+    drawFx();
   }
 
   return { resize, draw, invalidateBackground: () => { bgRect = null; } };
