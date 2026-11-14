@@ -1,5 +1,5 @@
 import { CONFIG, UNIT_ORDER, assetPath } from './config.js';
-import { upgradeLevels, countTeam } from './state.js';
+import { upgradeLevels, countTeam, isTerminal } from './state.js';
 import { spawnPlayer, doUpgrade, setMode } from './simulation.js';
 
 const C = CONFIG;
@@ -13,6 +13,8 @@ export function createUI(state, actions) {
     homeHp: $('homeHp'), enemyHp: $('enemyHp'), clock: $('clock'),
     unitBar: $('unitBar'), shopGrid: $('shopGrid'), upgradeGrid: $('upgradeGrid'),
     shopPanel: $('shopPanel'), upgradePanel: $('upgradePanel'),
+    backdrop: $('panelBackdrop'),
+    closeShopX: $('closeShopX'), closeUpgradeX: $('closeUpgradeX'),
     attackBtn: $('attackBtn'), defendBtn: $('defendBtn'), pauseBtn: $('pauseBtn'),
     overlay: $('pauseOverlay'), toastEl: $('toast'),
   };
@@ -58,6 +60,16 @@ export function createUI(state, actions) {
   function closePanels() {
     el.shopPanel.hidden = true;
     el.upgradePanel.hidden = true;
+    el.backdrop.hidden = true;
+  }
+
+  // 所有面板共用的唯一入口：顺手收掉另一个，避免两层叠在一起出不来。
+  function openPanel(which) {
+    if (state.phase !== 'playing') { toast('先回到对局再打开面板'); return; }
+    el.shopPanel.hidden = which !== 'shop';
+    el.upgradePanel.hidden = which !== 'upgrade';
+    el.backdrop.hidden = false;
+    if (which === 'upgrade') refreshUpgrade();
   }
 
   function buildUnitBar() {
@@ -164,6 +176,14 @@ export function createUI(state, actions) {
     el.overlay.innerHTML = '';
     const card = document.createElement('div');
     card.className = 'pauseCard';
+    const close = document.createElement('button');
+    close.className = 'overlayClose';
+    close.type = 'button';
+    close.textContent = '×';
+    close.setAttribute('aria-label', `关闭${title}浮层`);
+    close.title = '关闭（Esc）';
+    close.addEventListener('click', (e) => { e.stopPropagation(); handler?.(); });
+    card.appendChild(close);
     const t = document.createElement('span');
     t.textContent = title;
     card.appendChild(t);
@@ -185,8 +205,10 @@ export function createUI(state, actions) {
   }
 
   function showPause(on) {
-    if (on) showOverlay('已暂停', '按 P 或点击任意处继续', () => actions.togglePause());
-    else { el.overlay.hidden = true; overlayHandler = null; }
+    if (on) {
+      closePanels();  // 暂停浮层盖住面板时，不能把玩家留在关不掉的面板里
+      showOverlay('已暂停', '按 P、点 × 或点击空白处继续', () => actions.togglePause());
+    } else { el.overlay.hidden = true; overlayHandler = null; }
     sync();
   }
 
@@ -197,7 +219,7 @@ export function createUI(state, actions) {
     const clock = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
     showOverlay(
       won ? '胜利' : '失败',
-      '点击返回主菜单，再来一局',
+      '点 × 或按 Esc 返回主菜单，再来一局',
       () => actions.goMenu(),
       [
         `用时 ${clock}`,
@@ -214,7 +236,14 @@ export function createUI(state, actions) {
       if (k === 'Enter') { actions.start(); e.preventDefault(); }
       return;
     }
-    if (k === 'Escape') { closePanels(); return; }
+    if (k === 'Escape') {
+      e.preventDefault();
+      if (!el.shopPanel.hidden || !el.upgradePanel.hidden) { closePanels(); return; }
+      if (state.phase === 'paused') { actions.togglePause(); return; }
+      if (isTerminal(state)) { actions.goMenu(); return; }
+      closePanels();
+      return;
+    }
     if (k === 'p' || k === 'P') { actions.togglePause(); e.preventDefault(); return; }
     if (state.phase !== 'playing') return;
     if (/^[1-9]$/.test(k)) {
@@ -233,10 +262,13 @@ export function createUI(state, actions) {
     el.pauseBtn.addEventListener('click', () => actions.togglePause());
     el.attackBtn.addEventListener('click', () => mode('attack'));
     el.defendBtn.addEventListener('click', () => mode('defend'));
-    $('shopBtn').addEventListener('click', () => { closePanels(); el.shopPanel.hidden = false; });
-    $('closeShop').addEventListener('click', closePanels);
-    $('upgradeBtn').addEventListener('click', () => { closePanels(); el.upgradePanel.hidden = false; refreshUpgrade(); });
-    $('closeUpgrade').addEventListener('click', closePanels);
+    $('shopBtn').addEventListener('click', () => openPanel('shop'));
+    $('upgradeBtn').addEventListener('click', () => openPanel('upgrade'));
+    // 每个面板都有两条退路：底部文字按钮 + 右上角 ×
+    for (const id of ['closeShop', 'closeShopX', 'closeUpgrade', 'closeUpgradeX']) {
+      $(id).addEventListener('click', closePanels);
+    }
+    el.backdrop.addEventListener('click', closePanels);
     el.overlay.addEventListener('click', () => overlayHandler?.());
     document.addEventListener('keydown', handleKey);
     el.popMax.textContent = String(state.limits.popMax);

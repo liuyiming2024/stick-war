@@ -34,6 +34,9 @@ jobs:
       - name: 素材清单与实际文件校验
         run: node scripts/check-assets.mjs
 
+      - name: 页面退出通道静态自检
+        run: node scripts/check-navigation.mjs
+
       - name: Pages 静态入口自检
         run: |
           test -f index.html

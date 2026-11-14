@@ -125,16 +125,111 @@ export function createRenderer(canvas) {
     }
   }
 
-  function drawMine(state) {
-    const x = state.w * C.layout.goldMineXRatio;
-    const y = state.h * C.layout.goldMineYRatio;
+  // 矿石堆形象：岩石基座 + 嵌金块 + 金晶簇 + 地面阴影 + 呼吸光晕。
+  // 纯矢量，所以能按屏幕高度缩放、能画任意多个矿点，不依赖额外图片。
+  function drawOrePile(x, y, hgt, pulse, index) {
+    const w = hgt * C.layout.goldMineWidthRatio;
     ctx.save();
-    ctx.fillStyle = 'rgba(255,210,77,.92)';
-    ctx.beginPath(); ctx.arc(x, y, 17, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#a8790f'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = '#6b4c07'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
-    ctx.fillText('金矿', x, y + 4);
+    ctx.translate(x, y);
+
+    // 地面阴影与暖金光晕
+    ctx.fillStyle = P.mineShadow;
+    ctx.beginPath(); ctx.ellipse(0, 2, w * 0.46, hgt * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save();
+    ctx.globalAlpha = 0.18 + 0.16 * pulse;
+    const glow = ctx.createRadialGradient(0, -hgt * 0.42, hgt * 0.05, 0, -hgt * 0.42, w * 0.6);
+    glow.addColorStop(0, P.mineGlow);
+    glow.addColorStop(1, 'rgba(255,214,110,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.ellipse(0, -hgt * 0.42, w * 0.6, hgt * 0.55, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
+
+    const poly = (pts, fill) => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0] * w, pts[0][1] * hgt);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0] * w, pts[i][1] * hgt);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = '#3b2f18';
+      ctx.lineWidth = Math.max(1, hgt * 0.018);
+      ctx.stroke();
+    };
+
+    // 深灰褐岩石，两层叠出体积
+    poly([[-0.42, 0], [-0.37, -0.32], [-0.19, -0.52], [0.01, -0.44],
+          [0.15, -0.55], [0.36, -0.30], [0.42, 0]], '#675d4b');
+    poly([[-0.27, -0.20], [-0.11, -0.64], [0.07, -0.70], [0.23, -0.38], [0.15, -0.16]], '#7b6f59');
+    poly([[-0.40, -0.02], [-0.30, -0.22], [-0.14, -0.12], [-0.17, 0]], '#544b3d');
+
+    // 嵌在岩石里的金块：暗金切面 + 亮面高光
+    const gold = (cx, cy, r, rot) => {
+      ctx.save();
+      ctx.translate(cx * w, cy * hgt);
+      ctx.rotate(rot);
+      ctx.beginPath();
+      ctx.moveTo(-r, -r * 0.55); ctx.lineTo(-r * 0.28, -r); ctx.lineTo(r, -r * 0.45);
+      ctx.lineTo(r * 0.78, r * 0.7); ctx.lineTo(-r * 0.48, r); ctx.closePath();
+      ctx.fillStyle = '#d99a08'; ctx.fill();
+      ctx.strokeStyle = '#6b4c07'; ctx.lineWidth = Math.max(1, hgt * 0.014); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.28, -r); ctx.lineTo(r, -r * 0.45);
+      ctx.lineTo(r * 0.25, -r * 0.08); ctx.lineTo(-r * 0.78, -r * 0.18); ctx.closePath();
+      ctx.fillStyle = '#ffe07a'; ctx.fill();
+      ctx.restore();
+    };
+    gold(-0.26, -0.30, hgt * 0.095, -0.22);
+    gold(0.19, -0.44, hgt * 0.105, 0.28);
+    gold(0.01, -0.15, hgt * 0.075, 0.08);
+    gold(0.30, -0.11, hgt * 0.065, -0.34);
+
+    // 顶部金晶簇，左右矿点用不同倾角避免六堆完全复制粘贴
+    const tilt = index % 2 === 0 ? -0.12 : 0.12;
+    ctx.save();
+    ctx.translate(0.02 * w, -0.63 * hgt);
+    ctx.rotate(tilt);
+    ctx.beginPath();
+    ctx.moveTo(-hgt * 0.07, 0); ctx.lineTo(0, -hgt * 0.30);
+    ctx.lineTo(hgt * 0.07, 0); ctx.lineTo(0, hgt * 0.05); ctx.closePath();
+    ctx.fillStyle = '#ffcf3f'; ctx.fill();
+    ctx.strokeStyle = '#8a5f06'; ctx.lineWidth = Math.max(1, hgt * 0.012); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -hgt * 0.30); ctx.lineTo(0, hgt * 0.05);
+    ctx.lineTo(hgt * 0.07, 0); ctx.closePath();
+    ctx.fillStyle = '#fff0a8'; ctx.fill();
+    ctx.restore();
+
+    // 散落金粒
+    ctx.fillStyle = '#ffd24d';
+    for (const [px, py, pr] of [[-0.34, -0.06, 0.018], [0.36, -0.04, 0.015], [0.12, -0.02, 0.012]]) {
+      ctx.beginPath(); ctx.arc(px * w, py * hgt, Math.max(1, pr * hgt), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawMines(state) {
+    const hgt = state.h * C.layout.goldMineHeightRatio;
+    const y = state.h * C.layout.goldMineYRatio;
+    const mines = C.layout.goldMines;
+    for (let i = 0; i < mines.length; i++) {
+      const x = state.w * mines[i].xRatio;
+      const pulse = 0.5 + 0.5 * Math.sin(state.elapsed * 2.2 + i * 1.3);
+      drawOrePile(x, y, hgt, pulse, i);
+      // 有人正在挖：矿堆上方亮一串小点，让"这个矿在被用"看得见
+      const workers = state.units.filter((u) =>
+        u.kind === 'miner' && u.hp > 0 && u.mineIndex === i && u.job === 'mining').length;
+      if (workers) {
+        ctx.save();
+        ctx.fillStyle = P.goldColor;
+        const n = Math.min(workers, 4);
+        for (let k = 0; k < n; k++) {
+          ctx.beginPath();
+          ctx.arc(x + (k - (n - 1) / 2) * 9, y - hgt * 1.12, 2.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
   }
 
   function drawSprite(state, assets, key, cx, groundY, hgt, faceLeft, swing) {
@@ -242,7 +337,7 @@ export function createRenderer(canvas) {
     ctx.clearRect(0, 0, state.w, state.h);
     drawBackground(state, assets);
     drawStatues(state, assets);
-    drawMine(state);
+    drawMines(state);
     // 复制后再排序：渲染顺序不再改写物理数组。
     const sorted = [...state.units].sort((a, b) => a.x - b.x);
     for (const u of sorted) drawUnit(state, assets, u);

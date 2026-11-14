@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { CONFIG } from '../src/config.js';
 import { createState, resetMatch, spawnUnit, countTeam } from '../src/state.js';
 import { createRng } from '../src/rng.js';
-import { step, spawnPlayer, doUpgrade, setMode } from '../src/simulation.js';
+import { step, spawnPlayer, doUpgrade, setMode, minePositions, chooseMineIndex } from '../src/simulation.js';
 
 const C = CONFIG;
 const playing = (w = 800, h = 600) => {
@@ -218,4 +218,48 @@ test('对局统计随模拟累加，重开后归零', () => {
   resetMatch(s);
   assert.equal(s.stats.trips, 0);
   assert.equal(s.stats.playerSpawned, 0);
+});
+
+test('六个矿点坐标由配置生成，两侧各三且渲染/逻辑共用', () => {
+  const s = playing(1000, 600);
+  const mines = minePositions(s);
+  assert.equal(mines.length, C.layout.goldMines.length);
+  assert.equal(mines.filter((m) => m.side === 0).length, 3);
+  assert.equal(mines.filter((m) => m.side === 1).length, 3);
+  for (const [i, m] of mines.entries()) assert.equal(m.x, s.w * C.layout.goldMines[i].xRatio);
+  assert.ok(mines.every((m) => m.x > 0 && m.x < s.w));
+});
+
+test('矿工只去自家半场的矿，多人会分散到不同矿点', () => {
+  const s = quiet(playing(1000, 600));
+  assert.ok(chooseMineIndex(s, 0, 120) >= 0);
+  const left = minePositions(s).filter((m) => m.side === 0).map((m) => m.index);
+  const right = minePositions(s).filter((m) => m.side === 1).map((m) => m.index);
+  assert.ok(left.includes(chooseMineIndex(s, 0, 120)));
+  assert.ok(right.includes(chooseMineIndex(s, 1, 880)));
+
+  s.gold = 1000;
+  for (let i = 0; i < 4; i++) spawnPlayer(s, 'miner');
+  step(s, 1 / 60, createRng(9));
+  const assigned = s.units.map((u) => u.mineIndex);
+  assert.ok(assigned.every((i) => left.includes(i)), '我方矿工不得跨半场挖敌方矿');
+  assert.ok(new Set(assigned).size >= 2, `4 个矿工分散到了 ${new Set(assigned).size} 个矿点`);
+});
+
+test('双侧矿工都能形成经济闭环，不依赖中央矿', () => {
+  const s = quiet(playing(1000, 600));
+  s.gold = 1000;
+  const own = spawnUnit(s, 'miner', 0, null);
+  const foe = spawnUnit(s, 'miner', 1, null);
+  const rng = createRng(7);
+  let playerGold = 0, aiMineGold = 0;
+  for (let i = 0; i < 1200; i++) {
+    for (const e of step(s, 1 / 60, rng)) {
+      if (e.type === 'gold') (e.team === 0 ? (playerGold += e.amount) : (aiMineGold += e.amount));
+    }
+  }
+  assert.ok(s.stats.trips >= 2, `实际交付 ${s.stats.trips} 趟`);
+  assert.ok(playerGold > 0 && aiMineGold > 0,
+    `双方矿工都应交付：我方 ${playerGold} / 敌方 ${aiMineGold}`);
+  assert.ok(own.hp > 0 && foe.hp > 0);
 });

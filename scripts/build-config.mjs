@@ -11,7 +11,7 @@ const target = path.join(root, 'src', 'config.generated.js');
 
 const cfg = JSON.parse(await readFile(source, 'utf8'));
 
-const sections = ['meta', 'layout', 'match', 'economy', 'upgrade', 'combat', 'ai', 'units', 'presentation'];
+const sections = ['meta', 'layout', 'match', 'economy', 'upgrade', 'combat', 'ai', 'units', 'assets', 'presentation'];
 for (const key of sections) {
   if (!cfg[key]) throw new Error(`config/game.json 缺少段: ${key}`);
 }
@@ -25,6 +25,21 @@ for (const [key, u] of Object.entries(cfg.units)) {
 }
 if (cfg.match.fixedStep <= 0 || cfg.match.maxFrameDelta < cfg.match.fixedStep) {
   throw new Error('match.fixedStep / maxFrameDelta 配置不合理');
+}
+const mines = cfg.layout.goldMines;
+if (!Array.isArray(mines) || mines.length === 0) throw new Error('layout.goldMines 必须是非空数组');
+for (const [i, m] of mines.entries()) {
+  if (!(m.xRatio > 0 && m.xRatio < 1)) throw new Error(`goldMines[${i}].xRatio 必须落在 (0,1)`);
+  if (m.side !== 0 && m.side !== 1) throw new Error(`goldMines[${i}].side 必须为 0 或 1`);
+}
+for (const side of [0, 1]) {
+  if (!mines.some((m) => m.side === side)) throw new Error(`goldMines 缺少 side=${side} 的矿点`);
+}
+if (!(cfg.layout.goldMineHeightRatio > 0 && cfg.layout.goldMineWidthRatio > 0)) {
+  throw new Error('金矿形象尺寸比例必须为正');
+}
+if (!(cfg.assets.softTimeoutSec > 0 && cfg.assets.hardTimeoutSec > cfg.assets.softTimeoutSec)) {
+  throw new Error('assets 软/硬超时配置不合理');
 }
 
 const header = [

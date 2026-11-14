@@ -45,11 +45,19 @@ src/assets.js    素材、白色剪影贴图、超时降级
 
 **对局**：`menu → playing ⇄ paused → won | lost`。`step()` 在 `phase !== 'playing'` 时直接返回空事件，终局只触发一次 `end` 事件；`resetMatch()` 重建整份状态（含升级等级），不走「局部清零」那条容易漏字段的路。
 
-**矿工**：`toMine → mining → toHome → 交付金币 → toMine`。矿工 `kind='miner'`，完全不进战斗分支，因此不会出现 v1 里 `dmg:0 / baseCd:0` 每帧把敌人闪白重置的问题。挖掘进度与背矿状态都由 state 字段表达，渲染层只读。
+**矿工**：`toMine → mining → toHome → 交付金币 → toMine`。矿工 `kind='miner'`，完全不进战斗分支，因此不会出现 v1 里 `dmg:0 / baseCd:0` 每帧把敌人闪白重置的问题。挖掘进度与背矿状态都由 state 字段表达，渲染层只读。`mineIndex` 由 `chooseMineIndex()` 按「同阵营 + 负载最少 + 距离最近」分配；`tickMiner()` 在阶段切换时结转剩余 `dt`，消除离散事件随步长漂移。
 
 ## 坐标
 
-`layout.statueInset + statueHitRadius` 是**唯一**的雕像判定线，绘制血条、脚下椭圆、单位拆雕像、矿工交付点全部读它。金矿在 `w * goldMineXRatio`，驻守线在 `w * defendLineRatio`。所有资源用相对路径，所以项目站 `/stick-war/` 前缀和本地根路径都能跑。
+`layout.statueInset + statueHitRadius` 是**唯一**的雕像判定线，绘制血条、脚下椭圆、单位拆雕像、矿工交付点全部读它。矿点由 `layout.goldMines[].xRatio * w` 生成（`minePositions()` 是唯一口径），驻守线在 `w * defendLineRatio`。所有资源用相对路径，所以项目站 `/stick-war/` 前缀和本地根路径都能跑。
+
+## 导航与退出通道
+
+`ui.js` 里只有两个面板状态入口：`openPanel(which)`（互斥打开，顺手关掉另一个）和 `closePanels()`（同时收起遮罩）。**不要在别处直接改 `panel.hidden`**，否则遮罩与面板状态会脱节。
+
+层级（低 → 高）：`canvas/背景 0` → `panelBackdrop 140` → `面板 150` → `controlBtns 160` → `topBar / bottomBar 170` → `pauseOverlay 180` → `mainMenu 200` → `toast 300`。控制条放在战场右上角（`top:52px`），避免与面板底部的关闭按钮抢点击区域。
+
+每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 暂停 → 结算 → 主菜单`；点遮罩、点底部关闭按钮、点浮层空白处同样能退。`scripts/check-navigation.mjs` 静态守结构，`scripts/smoke-pages.mjs` 用 Playwright 跑 30 项交互断言。
 
 ## 配置怎么做到的
 
@@ -73,10 +81,11 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 | 文件 | 覆盖 |
 | --- | --- |
 | `tests/timing.test.mjs` | 30/60/144Hz 步数一致、掉帧 clamp、reset |
-| `tests/simulation.test.mjs` | dt 线性一致、矿工经济闭环、胜负状态机、AI 约束与解锁、雕像判定线、投射物命中/落空、统计累加、升级与重开 |
-| `tests/config.test.mjs` | 生成物无漂移、字段合法、单位约定 |
+| `tests/simulation.test.mjs` | dt 线性一致、矿工经济闭环与 dt 结转、双侧矿点分配、胜负状态机、AI 约束与解锁、雕像判定线、投射物命中/落空、统计累加、升级与重开 |
+| `tests/config.test.mjs` | 生成物无漂移、字段合法、双侧矿点结构、素材超时与单位约定 |
+| `scripts/smoke-pages.mjs` | 30 项页面可达性（进入/退出/×/Esc/遮罩/资源 200/无运行时异常） |
 
-CI 另外做全模块语法检查、素材字节数与 WebP 尺寸校验、Pages 入口自检。
+CI 另外做全模块语法检查、素材字节数与 WebP 尺寸校验、导航退出通道静态自检、Pages 入口自检。
 
 ## 为什么不引入打包器
 

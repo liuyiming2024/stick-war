@@ -3,16 +3,43 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.0.0",
-    "subtitle": "固定步长 · 矿工经济闭环 · 兵种独立升级"
+    "version": "2.1.0",
+    "subtitle": "固定步长 · 双侧矿脉 · 矿工经济闭环"
   },
   "layout": {
     "statueInset": 74,
     "statueHitRadius": 60,
     "statueHeightRatio": 0.36,
     "groundRatio": 0.76,
-    "goldMineXRatio": 0.5,
+    "goldMines": [
+      {
+        "xRatio": 0.14,
+        "side": 0
+      },
+      {
+        "xRatio": 0.22,
+        "side": 0
+      },
+      {
+        "xRatio": 0.3,
+        "side": 0
+      },
+      {
+        "xRatio": 0.7,
+        "side": 1
+      },
+      {
+        "xRatio": 0.78,
+        "side": 1
+      },
+      {
+        "xRatio": 0.86,
+        "side": 1
+      }
+    ],
     "goldMineYRatio": 0.752,
+    "goldMineHeightRatio": 0.09,
+    "goldMineWidthRatio": 1.25,
     "spawnInset": 120,
     "defendLineRatio": 0.3,
     "unitHeightRatio": 0.155,
@@ -62,7 +89,7 @@ export default Object.freeze({
   "units": {
     "miner": {
       "name": "矿工",
-      "desc": "往返金矿与雕像，每趟运回金币",
+      "desc": "就近往返自家矿脉，每趟运回金币",
       "cost": 25,
       "hp": 100,
       "speedPxPerSec": 66,
@@ -166,11 +193,17 @@ export default Object.freeze({
       "aiWeight": 1
     }
   },
+  "assets": {
+    "softTimeoutSec": 6,
+    "hardTimeoutSec": 20
+  },
   "presentation": {
     "playerColor": "#4dd35c",
     "enemyColor": "#ff4d4d",
     "goldColor": "#ffd24d",
     "flashAlpha": 0.55,
-    "backgroundTint": "rgba(120,180,80,.14)"
+    "backgroundTint": "rgba(120,180,80,.14)",
+    "mineShadow": "rgba(40,30,12,.28)",
+    "mineGlow": "rgba(255,214,110,.35)"
   }
 });

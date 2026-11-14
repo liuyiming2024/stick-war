@@ -1,6 +1,7 @@
-# 火柴人战争（网页版 v2）
+# 火柴人战争（网页版 v2.1）
 
 > 从「一个 18KB 的 index.html 包办一切」重构成模块化、可配置、可测试、可继续迭代的静态游戏。
+> v2.1：双侧各 3 条矿脉 + 矢量矿石堆形象 + 全界面退出通道 + 页面可达性烟测。
 
 [![CI](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml/badge.svg)](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml)
 
@@ -40,7 +41,11 @@ python3 -m http.server 4173
 | 无超时、无重试、无脏检查 | 8s 加载超时；背景矩形缓存到 resize；UI 数值脏检查；支持 DPR |
 | README 体积口径不准、manifest 有 `png`/`jpg` 幽灵字段 | 清掉幽灵字段；`scripts/check-assets.mjs` 逐项校验字节数，并解析 WebP 头校验画布尺寸（9/9 通过）：合计 **129816 字节 / 126.8 KiB / 9 个文件** |
 | 全内联 onclick、字符串拼 handler | 统一 `addEventListener`，商店/兵种栏/升级面板都由配置自动生成 |
-| 无配置、无测试、无 CI | `config/game.json` 单一配置源 + 22 个单测 + GitHub Actions |
+| 无配置、无测试、无 CI | `config/game.json` 单一配置源 + 27 个单测 + GitHub Actions |
+| 全战场只有一个黄圈当金矿，矿工跑半张图 | `layout.goldMines` 双侧各 3 个矿点，矿工只挖自家半场并按负载/距离分配 |
+| 金矿没有形象 | 纯矢量矿石堆（岩石基座 + 嵌金块 + 金晶簇 + 阴影 + 呼吸光晕），可缩放、不依赖图片 |
+| 面板/浮层没有关闭叉号 | 商店、升级、暂停、结算四层都有右上角 `×`；另有 `Esc` 分级后退、点击遮罩、底部关闭按钮 |
+| 素材加载慢就误判缺失 | 两段式超时（软 6s 放行开战 / 硬 20s 判缺失），晚到的图片补登记 |
 
 ## 目录结构
 
@@ -61,7 +66,9 @@ src/ui.js                     DOM 绑定、面板、快捷键
 src/main.js                   装配与主循环
 scripts/                      配置生成 / 静态服务 / 素材校验（含 WebP 头解析）
 docs/ARCHITECTURE.md          分层、状态机、时间约定与扩展点
-tests/                         node:test，22 个用例
+tests/                         node:test，27 个用例
+scripts/smoke-pages.mjs        Playwright 页面可达性烟测（30 项）
+scripts/check-navigation.mjs   不依赖浏览器的退出通道静态自检
 .github/workflows/ci.yml       CI
 ```
 
@@ -72,7 +79,7 @@ tests/                         node:test，22 个用例
 ```bash
 vim config/game.json       # 改兵种、经济、AI、升级、布局
 npm run build              # 重新生成 src/config.generated.js
-npm run check              # 生成 + 22 个测试 + 素材字节/尺寸校验
+npm run check              # 生成 + 27 个测试 + 素材字节/尺寸校验
 git add config/game.json src/config.generated.js
 ```
 
@@ -87,6 +94,18 @@ git add config/game.json src/config.generated.js
 | 暂停 / 继续 | `P` |
 | 关闭面板 | `Esc` |
 | 开始对局 | `Enter` |
+
+## 页面可达性
+
+「可达」的定义不是首页能开，而是**每个能进的层都能出、每份资源都能取到**：
+
+```bash
+npm run smoke     # 需要本机 Chrome；自动起静态服务，30 项断言
+```
+
+覆盖：首页 200 → 开始按钮放行 → 全部 JS/CSS/WebP 无 4xx → 无运行时异常 → 主菜单/商店/升级/暂停/结算的进入与退出；每个面板的 `×`、`Esc`、点击遮罩、底部关闭按钮；面板切换不叠层；暂停自动收起面板；结算统计；`菜单` 按钮。
+
+`Esc` 是分级后退：`面板 → 暂停 → 结算 → 主菜单`，不会一次跳到底把玩家丢出对局。CI 里跑 `scripts/check-navigation.mjs` 做静态兜底（不需要浏览器）。
 
 ## 结算统计
 

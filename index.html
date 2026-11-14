@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#1e1e1e">
+<link rel="icon" href="data:,">
 <title>火柴人战争</title>
 <link rel="stylesheet" href="./styles/main.css">
 </head>
@@ -15,7 +16,7 @@
   <p class="load" id="loadTip">资源加载中...</p>
   <button class="menuBtn" id="startBtn" disabled>开始战斗</button>
   <button class="menuBtn ghost" id="helpBtn">玩法说明</button>
-  <p class="hint" id="menuHint">键盘 1–7 出兵 · A/D 切换攻守 · P 暂停</p>
+  <p class="hint" id="menuHint">键盘 1–7 出兵 · A/D 切换攻守 · P 暂停 · Esc 后退</p>
 </div>
 
 <div id="gameUI" hidden>
@@ -48,19 +49,24 @@
     <div id="unitBar" role="group" aria-label="出兵"></div>
   </div>
 
+  <!-- 点击战场空白处即可收起下面的面板；底栏露出，方便直接切到另一个面板 -->
+  <div id="panelBackdrop" hidden aria-hidden="true"></div>
+
   <section id="shopPanel" hidden aria-label="兵种商店">
+    <button class="panelClose" id="closeShopX" type="button" aria-label="关闭兵种商店" title="关闭（Esc）">×</button>
     <h2>兵种商店 <span class="panelHint">点击卡片直接出兵</span></h2>
     <div class="shopGrid" id="shopGrid"></div>
     <button class="closeBtn" id="closeShop">关闭商店</button>
   </section>
 
   <section id="upgradePanel" hidden aria-label="兵种升级面板">
+    <button class="panelClose" id="closeUpgradeX" type="button" aria-label="关闭兵种升级面板" title="关闭（Esc）">×</button>
     <h2>兵种升级 <span class="panelHint">每级 80 金币，最高 8 级</span></h2>
     <div class="upgradeGrid" id="upgradeGrid"></div>
     <button class="closeBtn" id="closeUpgrade">关闭升级</button>
   </section>
 
-  <div id="pauseOverlay" hidden><div class="pauseCard">已暂停<small>按 P 或点击「继续」恢复</small></div></div>
+  <div id="pauseOverlay" hidden></div>
 </div>
 
 <div id="toast" role="status" aria-live="polite"></div>

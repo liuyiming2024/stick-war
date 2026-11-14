@@ -7,7 +7,36 @@ const C = CONFIG;
 
 const statueLeftLine = (s) => C.layout.statueInset + C.layout.statueHitRadius;
 const statueRightLine = (s) => s.w - C.layout.statueInset - C.layout.statueHitRadius;
-const mineX = (s) => s.w * C.layout.goldMineXRatio;
+
+/** 所有矿点的实际像素坐标，供渲染层与逻辑层共用（唯一口径）。 */
+export function minePositions(state) {
+  return C.layout.goldMines.map((m, index) => ({ ...m, index, x: state.w * m.xRatio }));
+}
+
+/** 矿工只认自家半场的矿：先挑占用最少的，再挑离得最近的。 */
+export function chooseMineIndex(state, team, fromX) {
+  const own = minePositions(state).filter((m) => m.side === team);
+  if (!own.length) return -1;
+  const load = new Array(C.layout.goldMines.length).fill(0);
+  for (const u of state.units) {
+    if (u.hp > 0 && u.kind === 'miner' && u.team === team &&
+        u.job !== 'toHome' && u.mineIndex >= 0 && u.mineIndex < load.length) {
+      load[u.mineIndex]++;
+    }
+  }
+  let best = own[0];
+  for (const m of own) {
+    const closer = Math.abs(m.x - fromX) < Math.abs(best.x - fromX);
+    if (load[m.index] < load[best.index] ||
+        (load[m.index] === load[best.index] && closer)) best = m;
+  }
+  return best.index;
+}
+
+const mineXByIndex = (state, index) => {
+  const m = C.layout.goldMines[index];
+  return m ? state.w * m.xRatio : state.w * 0.5;
+};
 
 export function minerHomeX(state, team) {
   return team === 0 ? statueLeftLine(state) : statueRightLine(state);
@@ -99,30 +128,54 @@ function tickFighter(state, u, dt, events) {
   }
 }
 
+// 阶段切换时把剩余 dt 结转给下一阶段：挖掘完成/交付发生在步中间时，
+// 剩下的时间仍然用于行走，因此 1/60 与 1/120 得到完全相同的轨迹与收益。
 function tickMiner(state, u, dt, events) {
   const home = minerHomeX(state, u.team);
-  if (u.job === 'toMine') {
-    if (moveToward(u, mineX(state), dt, C.economy.mineArriveEps, true)) {
-      u.job = 'mining';
-      u.mineTimer = C.economy.mineDurationSec;
-    }
-  } else if (u.job === 'mining') {
-    u.mineTimer -= dt;
-    if (u.mineTimer <= 0) {
-      u.mineTimer = 0;
-      u.carry = C.economy.goldPerTrip;
-      u.job = 'toHome';
-    }
-  } else {
-    if (moveToward(u, home, dt, C.economy.mineArriveEps, true)) {
-      if (u.carry > 0) {
-        if (u.team === 0) state.gold += u.carry;
-        else state.aiGold += u.carry;
-        state.stats.trips++;
-        events.push({ type: 'gold', amount: u.carry, team: u.team });
+  let remaining = dt;
+  let guard = 0;
+  while (remaining > 1e-9 && guard++ < 8) {
+    if (u.job === 'toMine') {
+      if (u.mineIndex < 0) u.mineIndex = chooseMineIndex(state, u.team, u.x);
+      const target = mineXByIndex(state, u.mineIndex);
+      const t = Math.abs(target - u.x) / u.speed;
+      if (t <= remaining + 1e-9) {
+        u.x = target;
+        u.job = 'mining';
+        u.mineTimer = C.economy.mineDurationSec;
+        remaining -= t;
+      } else {
+        u.x += Math.sign(target - u.x) * u.speed * remaining;
+        remaining = 0;
       }
-      u.carry = 0;
-      u.job = 'toMine';
+    } else if (u.job === 'mining') {
+      if (u.mineTimer <= remaining + 1e-9) {
+        remaining -= u.mineTimer;
+        u.mineTimer = 0;
+        u.carry = C.economy.goldPerTrip;
+        u.job = 'toHome';
+      } else {
+        u.mineTimer -= remaining;
+        remaining = 0;
+      }
+    } else {
+      const t = Math.abs(home - u.x) / u.speed;
+      if (t <= remaining + 1e-9) {
+        u.x = home;
+        if (u.carry > 0) {
+          if (u.team === 0) state.gold += u.carry;
+          else state.aiGold += u.carry;
+          state.stats.trips++;
+          events.push({ type: 'gold', amount: u.carry, team: u.team });
+        }
+        u.carry = 0;
+        u.job = 'toMine';
+        u.mineIndex = -1;
+        remaining -= t;
+      } else {
+        u.x += Math.sign(home - u.x) * u.speed * remaining;
+        remaining = 0;
+      }
     }
   }
 }

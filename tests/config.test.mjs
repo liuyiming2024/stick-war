@@ -37,3 +37,26 @@ test('雕像判定半径是绘制与伤害共用的同一个值', () => {
   assert.ok(raw.layout.statueInset > 0);
   assert.ok(raw.economy.mineDurationSec > 0);
 });
+
+test('双侧各有多个矿点，且都靠近自家阵地', () => {
+  const mines = raw.layout.goldMines;
+  assert.ok(mines.length >= 4, '不能退化成中央单矿');
+  for (const side of [0, 1]) {
+    const own = mines.filter((m) => m.side === side);
+    assert.ok(own.length >= 2, `side=${side} 至少两个矿点`);
+    for (const m of own) {
+      const nearOwn = side === 0 ? m.xRatio < 0.5 : m.xRatio > 0.5;
+      assert.ok(nearOwn, `side=${side} 的矿点 ${m.xRatio} 不在自家半场`);
+    }
+  }
+  const xs = mines.map((m) => m.xRatio);
+  assert.deepEqual(xs, [...xs].sort((a, b) => a - b), '矿点应按 x 递增排列');
+});
+
+test('素材两段式超时与金矿形象比例可配置', () => {
+  assert.ok(raw.assets.hardTimeoutSec > raw.assets.softTimeoutSec);
+  assert.ok(raw.layout.goldMineHeightRatio > 0);
+  assert.ok(raw.layout.goldMineWidthRatio > 0);
+  assert.ok(raw.presentation.mineGlow && raw.presentation.mineShadow);
+  assert.match(raw.meta.version, /^\d+\.\d+\.\d+$/);
+});

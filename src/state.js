@@ -60,6 +60,7 @@ export function spawnUnit(state, type, team, upgrades = null) {
     job: 'toMine',
     carry: 0,
     mineTimer: 0,
+    mineIndex: -1,
   };
   state.units.push(unit);
   if (team === 0) state.stats.playerSpawned++;

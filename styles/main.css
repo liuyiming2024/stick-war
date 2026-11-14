@@ -27,13 +27,21 @@ button:focus-visible{outline:2px solid #f4d16b;outline-offset:2px}
 .toolBtn svg{width:30px;height:30px}
 .unitIcon:disabled,.toolBtn:disabled{filter:grayscale(1) brightness(.45);cursor:not-allowed}
 
-#controlBtns{position:absolute;bottom:82px;right:8px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:90vw}
+#controlBtns{position:absolute;top:52px;right:8px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:90vw}
 .smallBtn{padding:7px 10px;border:none;border-radius:6px;color:#fff;font-size:13px;opacity:.92}
 .smallBtn[aria-pressed="true"]{opacity:1;box-shadow:0 0 0 2px #f4d16b inset}
 .attackBtn{background:#c0392b}.defendBtn{background:#2c6faa}.menuBtn2{background:#555}#pauseBtn{background:#6b4423}
 
-#shopPanel,#upgradePanel{position:absolute;left:0;right:0;bottom:80px;background:#1b1b1b;border-top:2px solid #555;padding:10px;z-index:150;max-height:62vh;overflow-y:auto}
-#shopPanel h2,#upgradePanel h2{color:#f4d16b;margin-bottom:8px;font-size:15px;font-weight:normal}
+#panelBackdrop{position:absolute;inset:0;background:rgba(0,0,0,.42);z-index:140;cursor:pointer}
+/* 面板打开时，底栏与控制条仍要在遮罩/面板之上：既是切换入口，也是退出通道 */
+#topBar{position:relative;z-index:170}
+#bottomBar{position:relative;z-index:170}
+#controlBtns{z-index:160}
+#shopPanel,#upgradePanel{position:absolute;left:0;right:0;bottom:80px;background:#1b1b1b;border-top:2px solid #555;padding:10px;padding-top:14px;z-index:150;max-height:62vh;overflow-y:auto}
+/* 每个能打开的层，右上角都必须有一个看得见、点得到的 × */
+.panelClose{position:absolute;top:8px;right:10px;width:32px;height:32px;border-radius:50%;border:2px solid #8a6a2a;background:#3a2a14;color:#ffd24d;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;z-index:2}
+.panelClose:hover{background:#6b4423;color:#fff}
+#shopPanel h2,#upgradePanel h2{color:#f4d16b;margin-bottom:8px;font-size:15px;font-weight:normal;padding-right:40px}
 .panelHint{color:#8a8a8a;font-size:11px;margin-left:8px}
 .shopGrid,.upgradeGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
 .shopItem,.upgradeItem{background:#2c2c2c;border:2px solid #4a4a4a;border-radius:10px;padding:7px;color:#fff;text-align:center}
@@ -49,11 +57,13 @@ button:focus-visible{outline:2px solid #f4d16b;outline-offset:2px}
 .closeBtn{margin-top:10px;width:100%;padding:10px;background:#555;color:#fff;border:none;border-radius:6px;font-size:15px}
 
 #pauseOverlay{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:180;display:flex;align-items:center;justify-content:center}
-.pauseCard{background:#242424;color:#f4d16b;padding:22px 34px;border-radius:12px;font-size:24px;text-align:center;display:flex;flex-direction:column;gap:8px}
+.pauseCard{position:relative;background:#242424;color:#f4d16b;padding:22px 34px;padding-top:30px;border-radius:12px;font-size:24px;text-align:center;display:flex;flex-direction:column;gap:8px;min-width:220px}
+.overlayClose{position:absolute;top:6px;right:8px;width:30px;height:30px;border-radius:50%;border:2px solid #8a6a2a;background:#3a2a14;color:#ffd24d;font-size:19px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+.overlayClose:hover{background:#6b4423;color:#fff}
 .pauseCard small{color:#9a9a9a;font-size:12px}
 .resultStats{display:flex;flex-direction:column;gap:4px;color:#d8d8d8;font-size:12px;font-weight:normal;line-height:1.5;font-variant-numeric:tabular-nums}
 .resultStats div:first-child{color:#f4d16b}
 
 #toast{position:absolute;left:50%;top:58px;transform:translate(-50%,-12px);background:rgba(20,20,20,.92);color:#ffd24d;border:1px solid #6b5520;border-radius:20px;padding:8px 18px;font-size:13px;z-index:300;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}
-@media (max-width:420px){#topBar{font-size:11px;padding:0 6px}#topBar .clock{display:none}.unitIcon,.toolBtn{width:58px;height:60px}}
+@media (max-width:420px){#topBar{font-size:11px;padding:0 6px}#topBar .clock{display:none}.unitIcon,.toolBtn{width:58px;height:60px}.panelClose{width:34px;height:34px;top:6px;right:6px}}
