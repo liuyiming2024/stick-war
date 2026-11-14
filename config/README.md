@@ -48,7 +48,9 @@ npm run smoke     # 可选：48 项页面可达性断言
 
 `scripts/check-vector.mjs` 会断言至少 12 个 `animation` 键真的被渲染层消费，避免「配了不用」。
 
-## presentation：统一视觉语言
+## presentation：统一视觉语言（v2.4 暗色剪影）
+
+v2.4 只改值、不改键名：天空/山/地面换成暮色低饱和，阵营色从亮绿亮红降为青绿/砖红并**只作点缀**（头带、盔缨、胸纹、腰带、护腕、披风），主体是 `bone` / `boneLight` 深炭剪影，武器统一 `weapon` / `weaponEdge` / `metalDark` 冷灰。新增 `skyGlow`、`hillMist`、`groundEdge`、`soil`、`crack`、`trailPlayer` / `trailEnemy` 等辅助色。改配色只需动这一段，Canvas 与内联 SVG 同时生效。
 
 所有 Canvas 形状与内联 SVG 共用：
 

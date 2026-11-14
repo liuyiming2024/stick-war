@@ -28,7 +28,11 @@ src/render.js    src/ui.js
 
 **硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 46 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
 
-## 全矢量渲染（v2.3）
+## 全矢量渲染（v2.3 引入，v2.4 美术重制）
+
+v2.4 把 v2.3 的高饱和平涂改为暗色剪影风格：`presentation` 调色板整体换掉，阵营色只作点缀；单位从细线改为收腰梯形躯干 + 带关节弯折的粗四肢 + 石盔/披风/护腕；云修掉「多个 arc 共用一次 stroke」的 Venn 图 bug（每圆单独 fill、不描边）；雕像加石甲/肩甲/裙甲/裂纹；矿堆晶簇改为带晶面的棱柱。`visualOffsets()` 在渲染层按 id 错开同位置的单位，专门解决多个矿工叠在一个矿点的问题，**不写回 `state.units[].x`**。
+
+这些改动的相位来源与下面列出的约束完全一致，没有引入墙钟时间或随机源。
 
 外部位图归零：`assets/`（9 张 webp）、`manifest.json`、`src/assets.js`、`scripts/check-assets.mjs` 全部退役。仓库不含任何图片文件，页面无 `<img>`，无位图请求。
 
