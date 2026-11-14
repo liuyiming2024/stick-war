@@ -85,6 +85,11 @@ for (const [re, label] of [
 for (const src of ['state.elapsed', 'u.walkPhase', 'u.anim', 'p.age', 'state.fx']) {
   if (!render.includes(src)) problems.push(`render.js 未使用相位源 ${src}`);
 }
+// v2.6：矢量只承担几何标记与 HUD，不许再往渲染层堆实体多边形画插画。
+// 当前只有金币迸发粒子用到 poly()，调用点上限留 3 给必要的小标记。
+const polyCalls = (render.match(/^\s*poly\(ctx,/gm) ?? []).length;
+if (polyCalls > 3) problems.push(`render.js 有 ${polyCalls} 处 poly() 调用：矢量只应做 HUD 标记，不要重新画实体`);
+else ok.push(`矢量收口：render.js 仅 ${polyCalls} 处多边形调用（实体观感由位图承担）`);
 const used = Object.keys(CONFIG.animation).filter((k) => render.includes(`A.${k}`));
 if (used.length < 12) problems.push(`animation 段仅 ${used.length} 个键被渲染层消费`);
 else ok.push(`渲染相位无墙钟/随机/filter，animation 消费 ${used.length}/${Object.keys(CONFIG.animation).length} 键`);

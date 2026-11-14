@@ -3,8 +3,8 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.5.0",
-    "subtitle": "位图立绘回归 · 矢量特效与动画"
+    "version": "2.6.0",
+    "subtitle": "位图立绘 · 矢量仅作 HUD 标记"
   },
   "layout": {
     "statueInset": 74,

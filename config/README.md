@@ -64,7 +64,7 @@ npm run smoke     # 可选：49 项页面可达性断言
 
 - `outline` — 矢量描边；`shadow` — 地面投影
 - `playerColor` / `enemyColor` — 阵营色；同时用于 `assets.js` 的立绘染色、血条、拖尾与 UI 强调色
-- `weapon` / `weaponEdge` / `metalDark` — 冷灰金属；`goldDark` / `goldLight` / `rockDark` / `rockLight` — 矿堆与岩面
+- `weapon` / `weaponEdge` / `metalDark` — 冷灰金属；`goldDark` / `goldLight` — 菱形矿点与金色粒子；`rockDark` / `rockLight` — 保留的备用岩面色（v2.6 起渲染层不再消费，build 仍校验存在）
 - `stoneLight` / `stoneMid` / `stoneDark` — 雕像备用；`skyTop` / `skyBottom` / `hillFar` / `groundTop` 等 — 背景位图缺失时的降级底色
 - `trailPlayer` / `trailEnemy` / `fortTint` / `mineGlow` / `crack` — 拖尾、护罩、光晕、裂纹
 
@@ -85,7 +85,7 @@ npm run smoke     # 可选：49 项页面可达性断言
 
 ## 矿点
 
-`layout.goldMines` 是数组，每项 `{ xRatio, side }`。`minePositions(state)` 是渲染/逻辑唯一口径；矿工只从 `side === team` 里按「占用最少 → 距离最近」挑矿，交付后清空 `mineIndex`。矿堆是矢量绘制（没有对应位图素材），改 `goldMineHeightRatio / goldMineWidthRatio` 即可调大小。
+`layout.goldMines` 是数组，每项 `{ xRatio, side }`。`minePositions(state)` 是渲染/逻辑唯一口径；矿工只从 `side === team` 里按「占用最少 → 距离最近」挑矿，交付后清空 `mineIndex`。v2.6 起矿点是**金色菱形几何标记**（不是插画），改 `goldMineHeightRatio / goldMineWidthRatio` 即可调大小；脉动/闪烁分别取 `animation.mineGlowHz` / `crystalTwinkleHz`。
 
 ## 加一个新兵种
 

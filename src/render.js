@@ -230,77 +230,71 @@ export function createRenderer(canvas) {
     drawStatue(state, assets, state.w - C.layout.statueInset, 1);
   }
 
-  // ── 矿堆：没有位图素材，继续矢量（晶洞岩块 + 棱柱金晶簇） ─────────────
+  // ── 矿点标记（v2.6）：不再手画实体插画 ────────────────────────────────
+  // v2.3/v2.4 的岩块+晶簇被证明是「假装成一幅画」，越画越丑。这里只留一个
+  // 几何符号：地面短线 + 单个金色菱形 + 单条高光面 + 脉动光晕。它承担的是
+  // 「这里有个可挖的矿」的信息功能，不是美术表现；实体观感全部交给位图立绘。
   function drawOrePile(state, x, y, hgt, index) {
     const t = state.elapsed;
     const w = hgt * C.layout.goldMineWidthRatio;
     const glowPulse = 0.5 + 0.5 * Math.sin(t * A.mineGlowHz * TAU + index * 1.3);
     const twinkle = 0.5 + 0.5 * Math.sin(t * A.crystalTwinkleHz * TAU + index * 2.1);
+    const halfW = w * 0.17, halfH = hgt * 0.31;
+    const cy = -hgt * 0.42;
+
     ctx.save();
     ctx.translate(x, y);
 
     ctx.fillStyle = P.mineShadow;
-    ctx.beginPath(); ctx.ellipse(0, 1, w * 0.44, hgt * 0.10, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 1, w * 0.30, hgt * 0.055, 0, 0, TAU); ctx.fill();
 
     ctx.save();
-    ctx.globalAlpha = 0.13 + 0.14 * glowPulse;
-    const glow = ctx.createRadialGradient(0, -hgt * 0.40, hgt * 0.04, 0, -hgt * 0.40, w * 0.55);
+    ctx.globalAlpha = 0.10 + 0.12 * glowPulse;
+    const glow = ctx.createRadialGradient(0, cy, hgt * 0.02, 0, cy, w * 0.48);
     glow.addColorStop(0, P.mineGlow);
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.ellipse(0, -hgt * 0.40, w * 0.55, hgt * 0.52, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, cy, w * 0.48, 0, TAU); ctx.fill();
     ctx.restore();
 
-    const lw = Math.max(1, hgt * 0.012);
-    const P2 = (pts, fill) => poly(ctx, pts.map(([px, py]) => [px * w, py * hgt]), fill, P.outline, lw);
-    P2([[-0.42, 0], [-0.38, -0.30], [-0.20, -0.48], [0.00, -0.42],
-      [0.16, -0.52], [0.37, -0.28], [0.42, 0]], P.rockDark);
-    P2([[-0.27, -0.18], [-0.12, -0.60], [0.06, -0.66], [0.23, -0.36], [0.15, -0.14]], P.rockLight);
-    P2([[-0.40, -0.02], [-0.30, -0.20], [-0.14, -0.11], [-0.17, 0]], P.stoneDark);
-    ctx.strokeStyle = rgba(P.weaponEdge, 0.12); ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-w * 0.30, -hgt * 0.22); ctx.lineTo(-w * 0.12, -hgt * 0.40);
-    ctx.moveTo(w * 0.22, -hgt * 0.30); ctx.lineTo(w * 0.32, -hgt * 0.12);
-    ctx.stroke();
+    // 地面基线：一条细线，不做石块堆叠
+    ctx.strokeStyle = rgba(P.goldColor, 0.34);
+    ctx.lineWidth = Math.max(1.2, hgt * 0.014);
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-w * 0.28, 0); ctx.lineTo(w * 0.28, 0); ctx.stroke();
 
-    const facet = (cx, cy, r, rot) => {
-      ctx.save();
-      ctx.translate(cx * w, cy * hgt); ctx.rotate(rot);
-      poly(ctx, [[-r, -r * 0.4], [-r * 0.25, -r], [r * 0.85, -r * 0.5],
-        [r * 0.7, r * 0.7], [-r * 0.5, r]], P.goldDark, P.outline, lw);
-      poly(ctx, [[-r * 0.25, -r], [r * 0.85, -r * 0.5], [r * 0.18, -r * 0.08], [-r * 0.7, -r * 0.2]],
-        P.goldLight, null);
-      ctx.restore();
-    };
-    facet(-0.26, -0.30, hgt * 0.088, -0.22);
-    facet(0.20, -0.43, hgt * 0.098, 0.28);
-    facet(0.01, -0.15, hgt * 0.070, 0.08);
-    facet(0.30, -0.10, hgt * 0.060, -0.34);
-
+    // 单个菱形：两笔完成，不做刻线、不堆晶面
+    const breathe = 1 + twinkle * 0.045;
     ctx.save();
-    ctx.translate(0.01 * w, -0.60 * hgt);
-    ctx.rotate(index % 2 === 0 ? -0.09 : 0.09);
-    ctx.scale(1 + twinkle * 0.06, 1 + twinkle * 0.12);
-    const spires = [[-0.080, 0.22, -0.16], [0.005, 0.34, 0], [0.090, 0.19, 0.15]];
-    for (const [off, hh, tilt] of spires) {
-      const bx = off * hgt, top = -hh * hgt, tip = bx + tilt * hgt * 0.10;
-      poly(ctx, [[bx - hgt * 0.050, 0], [bx + hgt * 0.050, 0],
-        [tip + hgt * 0.022, top + hgt * 0.055], [tip, top], [tip - hgt * 0.022, top + hgt * 0.055]],
-        P.goldDark, P.outline, lw);
-      poly(ctx, [[bx, 0], [bx + hgt * 0.050, 0],
-        [tip + hgt * 0.022, top + hgt * 0.055], [tip, top]], P.goldColor, null);
-      poly(ctx, [[tip, top], [tip - hgt * 0.022, top + hgt * 0.055], [bx, 0]], P.goldLight, null);
-    }
+    ctx.translate(0, cy);
+    ctx.scale(breathe, breathe);
+    ctx.beginPath();
+    ctx.moveTo(0, -halfH); ctx.lineTo(halfW, 0);
+    ctx.lineTo(0, halfH); ctx.lineTo(-halfW, 0);
+    ctx.closePath();
+    ctx.fillStyle = P.goldColor; ctx.fill();
+    ctx.strokeStyle = P.goldDark; ctx.lineWidth = Math.max(1.2, hgt * 0.014); ctx.stroke();
+    // 唯一的高光面
+    ctx.beginPath();
+    ctx.moveTo(0, -halfH); ctx.lineTo(halfW, 0); ctx.lineTo(0, 0);
+    ctx.closePath();
+    ctx.fillStyle = rgba(P.goldLight, 0.72); ctx.fill();
     ctx.restore();
 
+    // 顶部光点：闪烁强度取自 crystalTwinkleHz
+    ctx.save();
+    ctx.globalAlpha = 0.35 + twinkle * 0.55;
+    disc(ctx, 0, cy - halfH - hgt * 0.055, Math.max(1.6, hgt * 0.024), P.goldLight);
+    ctx.restore();
+
+    // 环绕金尘：确定性相位，数量取 trailDots
     for (let k = 0; k < A.trailDots; k++) {
       const ph = t * A.crystalTwinkleHz * TAU * 0.5 + k * 1.9 + index;
       ctx.save();
-      ctx.globalAlpha = 0.20 + 0.55 * (0.5 + 0.5 * Math.sin(ph));
-      const px = Math.cos(ph) * w * 0.36;
-      const py = -hgt * (0.55 + 0.28 * (0.5 + 0.5 * Math.sin(ph + 1)));
-      const r = Math.max(1, hgt * 0.016);
-      poly(ctx, [[px, py - r], [px + r * 0.7, py], [px, py + r], [px - r * 0.7, py]], P.goldLight);
+      ctx.globalAlpha = 0.16 + 0.40 * (0.5 + 0.5 * Math.sin(ph));
+      const px = Math.cos(ph) * w * 0.30;
+      const py = cy + Math.sin(ph) * halfH * 0.85;
+      disc(ctx, px, py, Math.max(1, hgt * 0.013), P.goldLight);
       ctx.restore();
     }
     ctx.restore();
@@ -404,15 +398,19 @@ export function createRenderer(canvas) {
     }
     ctx.restore();
 
-    // 以下特效在世界坐标，不随立绘镜像/倾斜
+    // 以下特效在世界坐标，不随立绘镜像/倾斜。
+    // 背矿状态用与矿点同源的小菱形标记（HUD 语义），不再画皮革袋子这种实体。
     if (u.kind === 'miner' && u.carry > 0) {
-      const bx = cx - h * 0.16, by = gy - h * 0.48 + carryBob * 0.4;
-      poly(ctx, [[bx - h * 0.085, by], [bx + h * 0.085, by],
-        [bx + h * 0.075, by + h * 0.15], [bx - h * 0.075, by + h * 0.15]],
-        P.wood, P.outline, h * 0.010);
-      poly(ctx, [[bx - h * 0.045, by + h * 0.02], [bx + h * 0.045, by + h * 0.02],
-        [bx + h * 0.030, by + h * 0.085], [bx - h * 0.030, by + h * 0.085]],
-        P.goldColor, null);
+      const bx = cx + h * 0.19, by = gy - h * 0.70 + carryBob * 0.4;
+      const r = Math.max(3, h * 0.055);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(bx, by - r); ctx.lineTo(bx + r * 0.72, by);
+      ctx.lineTo(bx, by + r); ctx.lineTo(bx - r * 0.72, by);
+      ctx.closePath();
+      ctx.fillStyle = P.goldColor; ctx.fill();
+      ctx.strokeStyle = P.goldDark; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.restore();
     }
 
     const bw = Math.max(28, h * 0.58), by = gy - h - 13;
@@ -445,49 +443,44 @@ export function createRenderer(canvas) {
     }
   }
 
-  // ── 投射物 / 金币迸发：保留矢量 ───────────────────────────────────────
+  // ── 投射物（v2.6）：统一细线拖尾 + 末端光点，不再画物体造型 ────────────
+  // 箭杆/箭羽/六边形石块/多层法球都是手绘实体，已在 v2.6 删除。现在只表达
+  // 「有个东西从 A 飞到 B」：一条按 trailDots 分段渐隐的线 + 一个圆点。
+  // 三种类型只在线宽、长度、光点半径与是否带细环上区分，全是 HUD 级几何。
   function drawProjectile(state, p) {
     const t = p.age;
     const arc = p.kind === 'rock' ? -Math.sin(Math.min(1, t / 0.6) * Math.PI) * 26 : 0;
     const x = p.x, y = p.y + arc;
     const ang = Math.atan2(p.ty - p.y, p.tx - p.x);
     const trail = p.team === 0 ? P.trailPlayer : P.trailEnemy;
+    const spec = {
+      arrow: { len: 15, lw: 1.8, dot: 2.6, ring: false },
+      rock: { len: 10, lw: 3.2, dot: 4.0, ring: false },
+      magic: { len: 20, lw: 2.2, dot: 3.4, ring: true },
+    }[p.kind] ?? { len: 14, lw: 2, dot: 3, ring: false };
+    const pulse = 0.5 + 0.5 * Math.sin(t * A.projectileSpinHz * TAU);
+
     ctx.save();
-    for (let k = 1; k <= A.trailDots; k++) {
-      const d = k * 4.5;
-      ctx.save();
-      ctx.globalAlpha = 0.30 * (1 - k / (A.trailDots + 1));
-      disc(ctx, x - Math.cos(ang) * d, y - Math.sin(ang) * d, Math.max(1, 3.2 - k * 0.5), trail);
-      ctx.restore();
+    ctx.lineCap = 'round';
+    for (let k = 0; k < A.trailDots; k++) {
+      const d0 = k * (spec.len / A.trailDots);
+      const d1 = (k + 1) * (spec.len / A.trailDots);
+      ctx.globalAlpha = 0.46 * (1 - k / (A.trailDots + 1));
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = spec.lw * (1 - k / (A.trailDots + 2));
+      ctx.beginPath();
+      ctx.moveTo(x - Math.cos(ang) * d1, y - Math.sin(ang) * d1);
+      ctx.lineTo(x - Math.cos(ang) * d0, y - Math.sin(ang) * d0);
+      ctx.stroke();
     }
-    if (p.kind === 'arrow') {
-      ctx.save();
-      ctx.translate(x, y); ctx.rotate(ang);
-      ctx.strokeStyle = P.outline; ctx.lineWidth = 4.2; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(8, 0); ctx.stroke();
-      ctx.strokeStyle = P.wood; ctx.lineWidth = 2.2;
-      ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(8, 0); ctx.stroke();
-      poly(ctx, [[8, 0], [1, -3.6], [1, 3.6]], P.weaponEdge, P.outline, 1);
-      for (const s of [-1, 1]) poly(ctx, [[-13, 0], [-17, s * 4], [-9, s * 2]], trail, null);
-      ctx.restore();
-    } else if (p.kind === 'rock') {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(t * A.projectileSpinHz * TAU);
-      poly(ctx, [[-6, -3], [-1, -7], [6, -4], [7, 2], [2, 7], [-5, 5]],
-        P.rockDark, P.outline, 1.2);
-      poly(ctx, [[-6, -3], [-1, -7], [1, -2], [-4, 0]], P.rockLight, null);
-      ctx.restore();
-    } else {
-      const pulse = 0.5 + 0.5 * Math.sin(t * A.projectileSpinHz * TAU);
-      const g = ctx.createRadialGradient(x, y, 1, x, y, 15 + pulse * 6);
-      g.addColorStop(0, trail);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x, y, 15 + pulse * 6, 0, TAU); ctx.fill();
-      disc(ctx, x, y, 4.2 + pulse, '#fff', P.outline, 1.2);
-      ctx.strokeStyle = trail; ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.arc(x, y, 8 + pulse * 2, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 1;
+    disc(ctx, x, y, spec.dot + (p.kind === 'magic' ? pulse * 1.2 : 0),
+      p.kind === 'magic' ? '#fff' : trail);
+    if (spec.ring) {
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha = 0.42 + 0.38 * pulse;
+      ctx.beginPath(); ctx.arc(x, y, 7 + pulse * 3, 0, TAU); ctx.stroke();
     }
     ctx.restore();
   }
