@@ -1,12 +1,12 @@
 {
   "name": "stick-war",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "private": true,
   "type": "module",
   "description": "火柴人战争 · 固定步长 Canvas 网页版",
   "scripts": {
     "serve": "node scripts/serve.mjs",
-    "build": "node scripts/build-config.mjs",
+    "build": "node scripts/build-config.mjs && node scripts/stamp-cache.mjs",
     "test": "node --test tests/",
     "smoke": "node scripts/smoke-pages.mjs",
     "check": "npm run build && npm test && node scripts/check-assets.mjs"

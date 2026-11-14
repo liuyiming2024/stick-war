@@ -6,6 +6,7 @@
 //   4) animation 段必须真的被渲染层消费
 //   5) Pages 静态入口完整
 import { readFile, readdir, stat } from 'node:fs/promises';
+
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { CONFIG, UNIT_ORDER, ASSET_KEYS } from '../src/config.js';
@@ -99,6 +100,37 @@ const html = await readFile(path.join(root, 'index.html'), 'utf8');
 if (!html.includes('type="module"')) problems.push('index.html 缺少 ESM 入口');
 try { await stat(path.join(root, '.nojekyll')); ok.push('Pages 入口完整'); }
 catch { problems.push('缺少 .nojekyll'); }
+
+// v2.7.1：版本化缓存指纹。裸 URL 的 ESM 模块会被浏览器按 URL 强缓存，
+// 推新版本后 HTML 更新了、子模块却还是旧文件（线上「还停在旧版本」的根因）。
+const version = CONFIG.meta.version;
+const Q = `?v=${version}`;
+const entryRe = /<script\b[^>]*\bsrc="([^"]+\.js)(?:\?v=[^"]*)?"/g;
+const entryTags = [...html.matchAll(entryRe)].map((m) => m[1]);
+const cssTags = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)(?:\?v=[^"]*)?"/g)].map((m) => m[1]);
+const stamped = [...html.matchAll(/\?v=([^"'\s]+)/g)].map((m) => m[1]);
+if (!entryTags.length) problems.push('index.html 未找到 module script 的 .js 入口');
+if (!stamped.length || !stamped.every((v) => v === version)) {
+  problems.push(`HTML 指纹不是当前版本 ${version}: ${[...new Set(stamped)].join(', ') || '无'}`);
+}
+if (!html.includes(`main.js${Q}`)) problems.push(`index.html 的 main.js 入口未带 ${Q}`);
+if (!html.includes(`main.css${Q}`)) problems.push(`index.html 的 stylesheet 未带 ${Q}`);
+if (!html.includes('http-equiv="Cache-Control"')) problems.push('index.html 缺少 no-cache meta');
+
+const srcFiles = (await readdir(path.join(root, 'src'))).filter((f) => f.endsWith('.js')).sort();
+const importRe = /\b(?:from|import)\s+['"](\.{1,2}\/[^'"]+?\.js)(?:\?v=([^'"]*))?['"]/g;
+let importCount = 0;
+for (const name of srcFiles) {
+  const txt = await readFile(path.join(root, 'src', name), 'utf8');
+  for (const m of txt.matchAll(importRe)) {
+    importCount++;
+    if (m[2] !== version) {
+      problems.push(`src/${name} 的 import ${m[1]} 指纹为 ${m[2] ?? '空'}，应为 ${version}`);
+    }
+  }
+}
+if (importCount < 10) problems.push(`只找到 ${importCount} 条相对 import，指纹脚本可能没跑`);
+else ok.push(`ESM 缓存指纹 ${Q}：HTML 入口/CSS + ${srcFiles.length} 个 src 文件共 ${importCount} 条 import 全部一致`);
 
 for (const line of ok) console.log('✓', line);
 if (problems.length) {

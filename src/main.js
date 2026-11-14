@@ -1,11 +1,11 @@
-import { CONFIG } from './config.js';
-import { createState, resetMatch } from './state.js';
-import { createRng } from './rng.js';
-import { step, minePositions, setDifficulty, aiGrowthInfo } from './simulation.js';
-import { createAssets } from './assets.js';
-import { createRenderer } from './render.js';
-import { createUI } from './ui.js';
-import { createFixedStepDriver } from './timing.js';
+import { CONFIG } from './config.js?v=2.7.1';
+import { createState, resetMatch } from './state.js?v=2.7.1';
+import { createRng } from './rng.js?v=2.7.1';
+import { step, minePositions, setDifficulty, aiGrowthInfo } from './simulation.js?v=2.7.1';
+import { createAssets } from './assets.js?v=2.7.1';
+import { createRenderer } from './render.js?v=2.7.1';
+import { createUI } from './ui.js?v=2.7.1';
+import { createFixedStepDriver } from './timing.js?v=2.7.1';
 
 const canvas = document.getElementById('canvas');
 const state = createState();

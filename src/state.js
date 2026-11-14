@@ -1,4 +1,4 @@
-import { CONFIG, UNIT_ORDER, bonusFor, freshUpgrades } from './config.js';
+import { CONFIG, UNIT_ORDER, bonusFor, freshUpgrades } from './config.js?v=2.7.1';
 
 // 纯状态：不引用 DOM / canvas，可在 Node 下直接构造与推演。
 export function createState(w = 0, h = 0, difficulty = 'normal') {

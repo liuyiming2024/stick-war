@@ -1,7 +1,7 @@
 // 纯逻辑层：完全不碰 DOM / canvas / window。
 // 所有时间量单位为秒，所有速度单位为 px/s；由 main.js 的固定步长驱动。
-import { CONFIG, UNIT_ORDER } from './config.js';
-import { countTeam, pendingTeam, spawnUnit } from './state.js';
+import { CONFIG, UNIT_ORDER } from './config.js?v=2.7.1';
+import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.7.1';
 
 const C = CONFIG;
 

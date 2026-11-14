@@ -1,4 +1,4 @@
-# 火柴人战争（网页版 v2.7）
+# 火柴人战争（网页版 v2.7.1）
 
 > 从「一个 18KB 的 `index.html` 包办一切」重构成模块化、可配置、可测试、可继续迭代的静态游戏。
 > v2.5 位图立绘回归 → v2.6 矢量降级为 HUD → **v2.7：敌方也要发育**。AI 不再按定时器凭空刷兵，而是自己训练矿工、真实往返运矿、用 `upgradePlan` 花钱升科技，攒够预算才出兵；难度差异来自经济倍率与训练速度，而不是出兵间隔。
@@ -21,6 +21,25 @@ python3 -m http.server 4173
 ```
 
 无运行时构建步骤，改完刷新即可；只有改 `config/game.json` 才需要 `npm run build` 重新生成 `src/config.generated.js`。9 张 WebP 合计 **129816 字节 / 126.8 KiB**，两段式超时放行后即可开战，弱网下晚到的图片会补登记。
+
+## v2.7.1：修掉「线上还停在旧版本」
+
+**症状**：v2.7.0 的 Pages build 与 CI 都 `success`、仓库里 `config.generated.js` 确实是 2.7.0，但浏览器打开仍显示 `v2.6.0`，甚至可能白屏。
+
+**根因不是部署失败，是裸 URL 的 ESM 缓存**：`index.html` 里是 `<script type="module" src="./src/main.js">`，`main.js` 内部又 `import './config.generated.js'`、`'./ui.js'`… 全是**不带任何版本号的相对 URL**。浏览器按 URL 缓存模块文件，推新版本只改了文件内容、没改 URL，于是 HTML 虽然更新，`main.js` / `config.generated.js` / `ui.js` 仍从 disk cache 取旧版。版本号恰好由 `config.generated.js` 提供，所以最直观的表现就是「版本号没变」；更坏的情况是新 `ui.js` 去 import 旧 `simulation.js` 里不存在的 `aiGrowthInfo`，模块图直接断掉。
+
+> 上一轮我用页面抓取器读到 `v2.7.0` 就断言线上没问题，那个判断不严谨：抓取器有独立的缓存路径，且它的图片请求全被沙盒网关 403，只能说明「某个边缘节点拿到了新文件」，不能代表真实浏览器。以用户实际看到的为准。
+
+**修法**：`scripts/stamp-cache.mjs` 把 `config/game.json` 的 `meta.version` 作为唯一指纹，给
+
+1. `index.html` 的 module script 与 stylesheet href
+2. `src/*.js` 里**每一条**相对 `.js` import
+
+统一追加 `?v=<version>`。版本号一变，整条 ESM 依赖图的 URL 同时失效，CDN 与浏览器都必须回源。当前是 `?v=2.7.1`，19 条 import 全部一致。脚本**幂等**（先剥旧 `?v=` 再追加），`npm run build` 自动执行；`check-assets.mjs` 静态断言 HTML 入口/CSS 与所有 src import 的指纹都等于当前版本，CI 用 `git diff --exit-code` 守住生成物不漂移。
+
+`index.html` 另加 `<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">`。Node 对 `file:` URL 的 search 参数只作模块缓存键、路径解析仍取 pathname，因此 `node --test` 与浏览器都能加载；本地 `serve.mjs` 用 `URL.pathname`，天然忽略 query。
+
+**一个诚实的限制**：如果浏览器此前把**旧版 `index.html` 本身**也缓存了（那版 HTML 里没有指纹），普通刷新不会重新拉 HTML，仍会走旧的裸 URL。所以**首次请按一次 `Ctrl+Shift+R` / `Cmd+Shift+R`，或用无痕窗口打开**；拿到带 `?v=2.7.1` 的 HTML 之后，以后每次升版本都会自动失效，不再需要手动硬刷。
 
 ## v2.7：敌方发育（不再哐哐派兵）
 
@@ -157,7 +176,8 @@ src/render.js                 位图立绘绘制 + 几何标记/HUD + 全部场�
 src/ui.js                     DOM 绑定、面板、队列条、快捷键
 src/main.js                   装配与主循环
 scripts/build-config.mjs      配置生成 + 结构校验
-scripts/check-assets.mjs      素材清单 / WebP 头 / 渲染确定性静态自检
+scripts/stamp-cache.mjs       给 ESM 入口与所有相对 import 加 ?v=<version> 缓存指纹（幂等）
+scripts/check-assets.mjs      素材清单 / WebP 头 / 渲染确定性 / 缓存指纹静态自检
 scripts/check-navigation.mjs  退出通道静态自检
 scripts/smoke-pages.mjs       Playwright 可达性烟测（56 项）
 scripts/serve.mjs             零依赖静态服务
@@ -177,7 +197,7 @@ npm run smoke              # 可选：本机 Chrome 跑 56 项可达性断言
 npm run check              # 生成 + 57 单测 + 素材/确定性静态自检
 ```
 
-`src/config.generated.js` 必须一起提交（Pages 直出静态文件）。CI 用 `git diff --exit-code` 守住一致性。加新兵种要同时补 `assets/<key>.webp` 与 `assets/manifest.json`，UI 与渲染会自动长出；改动画节奏只动 `animation` 段，改配色只动 `presentation` 段。
+`src/config.generated.js` 与所有带 `?v=` 指纹的 `src/*.js` / `index.html` 必须一起提交（Pages 直出静态文件）。**改 `meta.version` 后不跑 `npm run build` 会让线上继续吃旧缓存**——CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 守住一致性。加新兵种要同时补 `assets/<key>.webp` 与 `assets/manifest.json`，UI 与渲染会自动长出；改动画节奏只动 `animation` 段，改配色只动 `presentation` 段。
 
 ## 操作
 

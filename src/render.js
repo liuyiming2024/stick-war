@@ -5,7 +5,7 @@
 // 动画全部作用在位图的变换矩阵或矢量特效上，相位只来自
 // state.elapsed / unit.walkPhase / unit.anim / projectile.age / state.fx，
 // 不允许墙钟时间与随机源，因此暂停时画面完全静止、整局可复现。
-import { CONFIG } from './config.js';
+import { CONFIG } from './config.js?v=2.7.1';
 
 const C = CONFIG;
 const P = C.presentation;

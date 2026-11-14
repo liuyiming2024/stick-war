@@ -3,7 +3,7 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.7.0",
+    "version": "2.7.1",
     "subtitle": "位图立绘 · 敌方经济发育"
   },
   "layout": {

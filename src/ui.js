@@ -1,7 +1,7 @@
-import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js';
-import { unitIconHTML, toolSVG } from './icons.js';
-import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js';
-import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo } from './simulation.js';
+import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.7.1';
+import { unitIconHTML, toolSVG } from './icons.js?v=2.7.1';
+import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.7.1';
+import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo } from './simulation.js?v=2.7.1';
 
 const C = CONFIG;
 const $ = (id) => document.getElementById(id);

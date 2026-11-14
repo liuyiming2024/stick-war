@@ -139,6 +139,18 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 
 CI 另做全模块语法检查、配置漂移、导航静态自检、Pages 入口（含 `test -f assets/manifest.json` 与 `assets/*.webp` 数量 = 9）。Playwright 烟测需要本机 Chrome，CI 不跑（用静态自检兜底）。
 
+## 版本化缓存（v2.7.1）
+
+`index.html` 是唯一携带指纹的入口：`npm run build` 里的 `scripts/stamp-cache.mjs` 把 `meta.version` 写成 `?v=<version>`，追加到 module script、stylesheet href 以及 `src/*.js` 的**每一条**相对 `.js` import。裸 URL 的 ESM 子模块会被浏览器按 URL 强缓存，只改文件内容不改 URL 会导致「HTML 是新的、模块是旧的」——版本号恰好来自 `config.generated.js`，所以最容易观察成「线上还停在旧版本」；新模块 import 到旧模块缺失的导出时则直接白屏。
+
+约束：
+
+- 指纹脚本**幂等**，先剥旧 `?v=` 再追加；生成物（`index.html`、`src/*.js`、`src/config.generated.js`）全部提交。
+- `check-assets.mjs` 断言 HTML 入口/CSS 与 19 条 src import 的指纹都等于 `CONFIG.meta.version`；CI 用 `git diff --exit-code` 保证提交的是 stamp 后的文件。
+- Node 对 `file:` URL 的 search 参数只用于模块缓存键、路径解析取 pathname，所以 `node --test` 与浏览器都能加载；`serve.mjs` 用 `URL.pathname` 忽略 query。
+- **不要手改带 `?v=` 的 import**，也不要给 `tests/` 或 `scripts/` 的 import 加指纹（它们只在 Node 里跑）。改版本号就跑 `npm run build`。
+- 首次从旧版 HTML 升级的用户仍需硬刷新一次：缓存的旧 HTML 里没有指纹，普通刷新不会重新拉它。
+
 ## 为什么不引入打包器
 
 仓库只有原生 ESM + 静态资源，Pages 从 `main` 分支根目录直出（`build_type: legacy`）。加 Vite / npm 依赖会让「推 main 即上线」变成「先构建再传 artifact」。代价是：**不能 `file://` 双击打开**，本地必须起静态服务器（`npm run serve`）。

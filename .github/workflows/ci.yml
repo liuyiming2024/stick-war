@@ -21,8 +21,8 @@ jobs:
       - name: 重新生成配置模块
         run: npm run build
 
-      - name: 生成物不得与配置源漂移
-        run: git diff --exit-code -- src/config.generated.js
+      - name: 生成物与版本指纹不得漂移
+        run: git diff --exit-code -- src/config.generated.js index.html src/
 
       - name: 全部模块语法检查
         run: |
@@ -45,3 +45,4 @@ jobs:
           test -f assets/manifest.json
           test "$(ls assets/*.webp | wc -l)" -eq 9
           grep -q 'type="module"' index.html
+          grep -q '?v=' index.html

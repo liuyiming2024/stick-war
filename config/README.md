@@ -8,7 +8,9 @@ npm run check     # 生成 + 57 个单测 + 素材/渲染确定性静态自检
 npm run smoke     # 可选：56 项页面可达性断言
 ```
 
-`src/config.generated.js` 必须一起提交（Pages 从 `main` 直出，运行时不跑构建）。CI 用 `git diff --exit-code` 校验漂移。
+`src/config.generated.js` 必须一起提交（Pages 从 `main` 直出，运行时不跑构建）。CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 校验漂移。
+
+**`meta.version` 同时是 ESM 缓存指纹**：`scripts/stamp-cache.mjs` 会给 `index.html` 的 module script / stylesheet 与 `src/*.js` 的所有相对 import 追加 `?v=<version>`。改版本号后**必须** `npm run build`，否则浏览器会继续用旧 URL 的缓存模块（现象是线上停在旧版本，甚至因导出不匹配白屏）。`check-assets.mjs` 会静态校验 19 条 import 的指纹全等于当前版本。
 
 `scripts/build-config.mjs` 同时承担结构校验：必填段、单位字段、`trainSec > 0`、难度三档、`damageMatrix` 四个倍率、矿点分布、`assets` 软/硬超时、`animation` 全部参数为正、`presentation` 调色板齐全。
 
