@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 重新生成配置模块
+        run: npm run build
+
+      - name: 生成物不得与配置源漂移
+        run: git diff --exit-code -- src/config.generated.js
+
+      - name: 全部模块语法检查
+        run: |
+          for f in src/*.js scripts/*.mjs tests/*.mjs; do node --check "$f"; done
+
+      - name: 单元测试
+        run: npm test
+
+      - name: 素材清单与实际文件校验
+        run: node scripts/check-assets.mjs
+
+      - name: Pages 静态入口自检
+        run: |
+          test -f index.html
+          test -f .nojekyll
+          test -f src/main.js
+          grep -q 'type="module"' index.html

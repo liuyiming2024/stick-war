@@ -2,494 +2,69 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1e1e1e">
 <title>火柴人战争</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-html,body{height:100%;overflow:hidden;background:#111;touch-action:none;user-select:none}
-#mainMenu{position:absolute;inset:0;background:#242424;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200}
-#mainMenu h1{color:#f4d16b;font-size:42px;margin-bottom:8px;letter-spacing:3px}
-#mainMenu .sub{color:#9a9a9a;margin-bottom:26px;font-size:13px;text-align:center;padding:0 24px;line-height:1.7}
-.menuBtn{width:230px;padding:14px;margin:6px;font-size:19px;border:none;border-radius:8px;background:#8b4513;color:#fff}
-.menuBtn:disabled{opacity:.45}
-#gameUI{display:none;position:absolute;inset:0}
-#topBar{height:44px;background:#2b2b2b;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:13px;border-bottom:1px solid #444}
-#canvas{width:100%;height:calc(100% - 120px);display:block;background:#8fc76a}
-#bottomBar{height:76px;background:#1e1e1e;display:flex;align-items:center;padding:6px 8px;gap:6px;overflow-x:auto;border-top:2px solid #444}
-.unitIcon{width:64px;height:64px;border-radius:10px;background:#3a3a3a;border:2px solid #555;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-size:11px;flex:0 0 auto;padding:0}
-.unitIcon img{width:38px;height:38px;object-fit:contain}
-.unitIcon .cost{color:#ffd24d;font-weight:bold;font-size:10px}
-.unitIcon.disabled{filter:grayscale(1) brightness(.45)}
-#shopBtn,#upgradeBtn{width:64px;height:64px;border-radius:10px;background:#6b4423;border:2px solid #8b5a2b;color:#fff;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:0 0 auto;padding:0}
-#shopBtn svg,#upgradeBtn svg{width:34px;height:34px}
-#controlBtns{position:absolute;bottom:82px;right:8px;display:flex;gap:6px}
-.smallBtn{padding:7px 10px;border:none;border-radius:6px;color:#fff;font-size:13px;opacity:.92}
-.attackBtn{background:#c0392b}
-.defendBtn{background:#2c6faa}
-.menuBtn2{background:#555}
-#shopPanel,#upgradePanel{display:none;position:absolute;left:0;right:0;bottom:80px;background:#1b1b1b;border-top:2px solid #555;padding:10px;z-index:150;max-height:62vh;overflow-y:auto}
-#shopPanel h3,#upgradePanel h3{color:#f4d16b;margin-bottom:8px;font-size:15px}
-.shopGrid,.upgradeGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.shopItem,.upgradeItem{background:#2c2c2c;border:2px solid #4a4a4a;border-radius:10px;padding:7px;color:#fff;text-align:center}
-.shopItem img,.upgradeItem img{width:44px;height:44px;object-fit:contain;display:block;margin:0 auto 3px}
-.shopItem .name,.upgradeItem .name{font-size:13px;color:#f4d16b}
-.price{font-size:12px;color:#ffd24d}
-.desc{font-size:10px;color:#a9a9a9;margin-top:3px;line-height:1.4}
-.upgradeRow{display:flex;gap:3px;margin-top:6px}
-.upgradeRow button{font-size:10px;padding:4px 3px;border:none;border-radius:3px;flex:1}
-.btnAtk{background:#b83232;color:#fff}
-.btnDef{background:#2b702b;color:#fff}
-.btnSpd{background:#2b5899;color:#fff}
-#closeShop,#closeUpgrade{margin-top:10px;width:100%;padding:10px;background:#555;color:#fff;border:none;border-radius:6px;font-size:15px}
-</style>
+<link rel="stylesheet" href="./styles/main.css">
 </head>
 <body>
 
 <div id="mainMenu">
   <h1>火柴人战争</h1>
-  <div class="sub">兵种升级 · 图标商店 · 绿方阵营<br><span id="loadTip">资源加载中...</span></div>
-  <button class="menuBtn" id="startBtn" onclick="startGame()" disabled>开始战斗</button>
-  <button class="menuBtn" onclick="alert('矿工挖矿赚金币，底部图标出兵，升级面板强化兵种。摧毁红色雕像即可获胜！')">玩法说明</button>
+  <p class="sub" id="menuSub">兵种升级 · 图标商店 · 绿方阵营</p>
+  <p class="load" id="loadTip">资源加载中...</p>
+  <button class="menuBtn" id="startBtn" disabled>开始战斗</button>
+  <button class="menuBtn ghost" id="helpBtn">玩法说明</button>
+  <p class="hint" id="menuHint">键盘 1–7 出兵 · A/D 切换攻守 · P 暂停</p>
 </div>
 
-<div id="gameUI">
+<div id="gameUI" hidden>
   <div id="topBar">
     <span>金币 <b id="gold">120</b></span>
-    <span>人口 <b id="pop">0</b>/20</span>
-    <span style="color:#79e08a">我方 <b id="homeHp">1600</b></span>
-    <span style="color:#ff8080">敌方 <b id="enemyHp">1600</b></span>
+    <span>人口 <b id="pop">0</b>/<b id="popMax">20</b></span>
+    <span class="home">我方 <b id="homeHp">1600</b></span>
+    <span class="enemy">敌方 <b id="enemyHp">1600</b></span>
+    <span class="clock" id="clock">00:00</span>
   </div>
 
-  <canvas id="canvas"></canvas>
+  <canvas id="canvas" aria-label="战场"></canvas>
 
   <div id="controlBtns">
-    <button class="smallBtn attackBtn" onclick="setMode('attack')">进攻</button>
-    <button class="smallBtn defendBtn" onclick="setMode('defend')">固守</button>
-    <button class="smallBtn menuBtn2" onclick="backMenu()">菜单</button>
+    <button class="smallBtn attackBtn" id="attackBtn" aria-pressed="false">进攻</button>
+    <button class="smallBtn defendBtn" id="defendBtn" aria-pressed="true">固守</button>
+    <button class="smallBtn" id="pauseBtn" aria-pressed="false">暂停</button>
+    <button class="smallBtn menuBtn2" id="menuBtn">菜单</button>
   </div>
 
   <div id="bottomBar">
-    <button id="shopBtn" onclick="openShop()">
-      <svg viewBox="0 0 64 64"><rect x="6" y="22" width="52" height="32" fill="#8b4513" stroke="#f4d16b" stroke-width="3"/><path d="M6 22 L32 6 L58 22" fill="#a0522d" stroke="#f4d16b" stroke-width="3"/><circle cx="20" cy="40" r="4" fill="#ffd24d"/><circle cx="32" cy="40" r="4" fill="#ffd24d"/><circle cx="44" cy="40" r="4" fill="#ffd24d"/></svg>
+    <button class="toolBtn" id="shopBtn" aria-label="打开兵种商店">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="22" width="52" height="32" fill="#8b4513" stroke="#f4d16b" stroke-width="3"/><path d="M6 22 L32 6 L58 22" fill="#a0522d" stroke="#f4d16b" stroke-width="3"/><circle cx="20" cy="40" r="4" fill="#ffd24d"/><circle cx="32" cy="40" r="4" fill="#ffd24d"/><circle cx="44" cy="40" r="4" fill="#ffd24d"/></svg>
       <span>商店</span>
     </button>
-    <button id="upgradeBtn" onclick="openUpgrade()">
-      <svg viewBox="0 0 64 64"><path d="M32 8 L44 26 L36 26 L36 52 L28 52 L28 26 L20 26 Z" fill="#ffd24d"/></svg>
+    <button class="toolBtn" id="upgradeBtn" aria-label="打开升级面板">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 8 L44 26 L36 26 L36 52 L28 52 L28 26 L20 26 Z" fill="#ffd24d"/></svg>
       <span>升级</span>
     </button>
+    <div id="unitBar" role="group" aria-label="出兵"></div>
   </div>
 
-  <div id="shopPanel">
-    <h3>兵种商店</h3>
+  <section id="shopPanel" hidden aria-label="兵种商店">
+    <h2>兵种商店 <span class="panelHint">点击卡片直接出兵</span></h2>
     <div class="shopGrid" id="shopGrid"></div>
-    <button id="closeShop" onclick="closeShop()">关闭商店</button>
-  </div>
+    <button class="closeBtn" id="closeShop">关闭商店</button>
+  </section>
 
-  <div id="upgradePanel">
-    <h3>兵种升级面板</h3>
+  <section id="upgradePanel" hidden aria-label="兵种升级面板">
+    <h2>兵种升级 <span class="panelHint">每级 80 金币，最高 8 级</span></h2>
     <div class="upgradeGrid" id="upgradeGrid"></div>
-    <button id="closeUpgrade" onclick="closeUpgrade()">关闭升级</button>
-  </div>
+    <button class="closeBtn" id="closeUpgrade">关闭升级</button>
+  </section>
+
+  <div id="pauseOverlay" hidden><div class="pauseCard">已暂停<small>按 P 或点击「继续」恢复</small></div></div>
 </div>
 
-<script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-let w = 0, h = 0;
+<div id="toast" role="status" aria-live="polite"></div>
 
-let gold = 120;
-let homeHp = 1600, enemyHp = 1600;
-let units = [];
-let gameMode = 'defend';
-let gameRun = false;
-const popMax = 20;
-
-const unitCfg = {
-  miner:  { name:'矿工',   cost:25,  hp:100, speed:1.1, dmg:0,  range:0,   radius:11, baseCd:0 },
-  sword:  { name:'剑士',   cost:50,  hp:200, speed:1.7, dmg:14, range:24,  radius:12, baseCd:70 },
-  spear:  { name:'矛士',   cost:75,  hp:280, speed:1.3, dmg:22, range:34,  radius:13, baseCd:80 },
-  archer: { name:'弓箭手', cost:100, hp:140, speed:1.4, dmg:16, range:150, radius:12, baseCd:90 },
-  stone:  { name:'投石兵', cost:140, hp:180, speed:1.2, dmg:24, range:170, radius:12, baseCd:100 },
-  giant:  { name:'巨人',   cost:175, hp:700, speed:0.65,dmg:40, range:30,  radius:17, baseCd:110 },
-  wizard: { name:'巫师',   cost:220, hp:160, speed:1.0, dmg:30, range:120, radius:13, baseCd:95 }
-};
-const ORDER = Object.keys(unitCfg);
-
-const UP_COST = 80;
-const upgradeData = {};
-for (const k of ORDER) upgradeData[k] = { atk:0, def:0, spd:0 };
-
-/* ---------- 素材加载 ---------- */
-const IMG = {};
-let assetsReady = false;
-const ASSET_LIST = [...ORDER, 'statue', 'battlefield'];
-
-function assetPath(key){
-  return key === 'battlefield' ? 'assets/battlefield.webp' : 'assets/' + key + '.webp';
-}
-
-function loadAssets(){
-  let done = 0;
-  const total = ASSET_LIST.length;
-  const tip = document.getElementById('loadTip');
-  ASSET_LIST.forEach(key => {
-    const img = new Image();
-    img.onload = () => {
-      done++;
-      if (tip) tip.textContent = '资源加载 ' + done + '/' + total;
-      if (done >= total) {
-        assetsReady = true;
-        if (tip) tip.textContent = '素材就绪，可以开战';
-        document.getElementById('startBtn').disabled = false;
-      }
-    };
-    img.onerror = () => {
-      done++;
-      if (done >= total) {
-        assetsReady = true;
-        document.getElementById('startBtn').disabled = false;
-        if (tip) tip.textContent = '部分素材缺失，已使用替代绘制';
-      }
-    };
-    img.src = assetPath(key);
-    IMG[key] = img;
-  });
-}
-
-/* ---------- 尺寸 ---------- */
-function resize(){
-  const cw = canvas.clientWidth || window.innerWidth;
-  const ch = canvas.clientHeight || Math.max(300, window.innerHeight - 120);
-  w = cw; h = ch;
-  canvas.width = Math.round(cw);
-  canvas.height = Math.round(ch);
-}
-
-/* ---------- UI ---------- */
-function buildBars(){
-  const bar = document.getElementById('bottomBar');
-  ORDER.forEach(key => {
-    const c = unitCfg[key];
-    const btn = document.createElement('button');
-    btn.className = 'unitIcon';
-    btn.dataset.unit = key;
-    btn.onclick = () => spawn(key);
-    btn.innerHTML = '<img src="' + assetPath(key) + '" alt="' + c.name + '"><span>' + c.name + '</span><span class="cost">' + c.cost + '</span>';
-    bar.appendChild(btn);
-  });
-}
-
-function buildShop(){
-  const g = document.getElementById('shopGrid');
-  const desc = { miner:'持续产金', sword:'近战主力', spear:'血厚抗线', archer:'远程射击', stone:'远程重击', giant:'高攻高血', wizard:'高伤法术' };
-  g.innerHTML = '';
-  ORDER.forEach(key => {
-    const c = unitCfg[key];
-    const d = document.createElement('div');
-    d.className = 'shopItem';
-    d.onclick = () => spawn(key);
-    d.innerHTML = '<img src="' + assetPath(key) + '" alt=""><div class="name">' + c.name + '</div><div class="price">' + c.cost + ' 金币</div><div class="desc">' + desc[key] + '</div>';
-    g.appendChild(d);
-  });
-}
-
-function refreshUpgradeUI(){
-  const g = document.getElementById('upgradeGrid');
-  g.innerHTML = '';
-  ORDER.forEach(key => {
-    const lv = upgradeData[key];
-    const d = document.createElement('div');
-    d.className = 'upgradeItem';
-    d.innerHTML = '<img src="' + assetPath(key) + '" alt=""><div class="name">' + unitCfg[key].name + '</div>' +
-      '<div class="desc">攻 ' + lv.atk + ' · 防 ' + lv.def + ' · 速 ' + lv.spd + '</div>' +
-      '<div class="upgradeRow">' +
-      '<button class="btnAtk" onclick="doUp(\'' + key + '\',\'atk\')">攻+' + UP_COST + '</button>' +
-      '<button class="btnDef" onclick="doUp(\'' + key + '\',\'def\')">防+' + UP_COST + '</button>' +
-      '<button class="btnSpd" onclick="doUp(\'' + key + '\',\'spd\')">速+' + UP_COST + '</button>' +
-      '</div>';
-    g.appendChild(d);
-  });
-}
-
-function doUp(type, stat){
-  if (gold < UP_COST) { flashText('金币不足'); return; }
-  gold -= UP_COST;
-  upgradeData[type][stat]++;
-  refreshUpgradeUI();
-  updateUI();
-}
-
-function getBonus(t){
-  const u = upgradeData[t];
-  return {
-    dmgMul: 1 + u.atk * 0.15,
-    defMul: Math.max(0.35, 1 - u.def * 0.12),
-    cdMul: Math.max(0.45, 1 - u.spd * 0.10)
-  };
-}
-
-/* ---------- 流程 ---------- */
-function startGame(){
-  document.getElementById('mainMenu').style.display = 'none';
-  document.getElementById('gameUI').style.display = 'block';
-  resetGame();
-  resize();
-  gameRun = true;
-  refreshUpgradeUI();
-  requestAnimationFrame(loop);
-}
-
-function backMenu(){
-  gameRun = false;
-  document.getElementById('mainMenu').style.display = 'flex';
-  document.getElementById('gameUI').style.display = 'none';
-}
-
-function resetGame(){
-  gold = 120; homeHp = 1600; enemyHp = 1600;
-  units = []; gameMode = 'defend';
-  updateUI();
-}
-
-function setMode(m){ gameMode = m; }
-function openShop(){ document.getElementById('shopPanel').style.display = 'block'; }
-function closeShop(){ document.getElementById('shopPanel').style.display = 'none'; }
-function openUpgrade(){ refreshUpgradeUI(); document.getElementById('upgradePanel').style.display = 'block'; }
-function closeUpgrade(){ document.getElementById('upgradePanel').style.display = 'none'; }
-
-function getPop(){ return units.filter(u => u.team === 0).length; }
-
-function spawn(type){
-  const cfg = unitCfg[type];
-  if (!gameRun) return;
-  if (gold < cfg.cost) { flashText('金币不够'); return; }
-  if (getPop() >= popMax) { flashText('人口已满'); return; }
-  const b = getBonus(type);
-  gold -= cfg.cost;
-  units.push({
-    type: type, team: 0, x: 120, y: h * 0.76,
-    hp: cfg.hp, maxHp: cfg.hp,
-    speed: cfg.speed,
-    dmg: cfg.dmg * b.dmgMul,
-    range: cfg.range,
-    radius: cfg.radius,
-    attackCd: cfg.baseCd * b.cdMul,
-    baseCd: cfg.baseCd * b.cdMul,
-    def: b.defMul,
-    anim: Math.random() * 30, hitFlash: 0, atkAnim: 0
-  });
-  updateUI();
-}
-
-function aiSpawn(){
-  const arr = ['sword','spear','archer'];
-  const t = arr[Math.floor(Math.random() * arr.length)];
-  const cfg = unitCfg[t];
-  units.push({
-    type: t, team: 1, x: w - 120, y: h * 0.76,
-    hp: cfg.hp, maxHp: cfg.hp,
-    speed: cfg.speed, dmg: cfg.dmg, range: cfg.range,
-    radius: cfg.radius,
-    attackCd: cfg.baseCd, baseCd: cfg.baseCd,
-    def: 1, anim: Math.random() * 30, hitFlash: 0, atkAnim: 0
-  });
-}
-
-let flashTimer = null;
-function flashText(msg){
-  const el = document.getElementById('gold');
-  el.textContent = msg;
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => updateUI(), 800);
-}
-
-function updateButtons(){
-  const isFull = getPop() >= popMax;
-  document.querySelectorAll('.unitIcon').forEach(btn => {
-    const cfg = unitCfg[btn.dataset.unit];
-    if (gold < cfg.cost || isFull) btn.classList.add('disabled');
-    else btn.classList.remove('disabled');
-  });
-}
-
-/* ---------- 绘制 ---------- */
-function unitHeight(u){
-  const base = h * 0.155;
-  if (u.type === 'giant') return base * 1.5;
-  if (u.type === 'miner') return base * 0.95;
-  return base;
-}
-
-function drawSprite(key, cx, groundY, targetH, facingLeft, flash){
-  const img = IMG[key];
-  if (!img || !img.width) return;
-  const dw = targetH * (img.width / img.height);
-  ctx.save();
-  ctx.translate(cx, groundY);
-  if (facingLeft) ctx.scale(-1, 1);
-  if (flash) ctx.filter = 'brightness(1.75)';
-  ctx.drawImage(img, -dw / 2, -targetH, dw, targetH);
-  ctx.restore();
-}
-
-function drawUnit(u){
-  const groundY = u.y;
-  const uh = unitHeight(u);
-  const faceLeft = u.team === 1;
-  const lunge = u.atkAnim > 0 ? (u.team === 0 ? 7 : -7) : 0;
-  const bob = (Math.floor(u.anim / 12) % 2 === 0) ? 0 : uh * 0.012;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(u.x, groundY - 2, uh * 0.2, uh * 0.05, 0, 0, Math.PI * 2);
-  ctx.fillStyle = u.team === 0 ? 'rgba(63,174,75,.30)' : 'rgba(212,58,58,.28)';
-  ctx.fill();
-  ctx.restore();
-
-  drawSprite(u.type, u.x + lunge, groundY + 1 - bob, uh, faceLeft, u.hitFlash > 0);
-
-  const bw = Math.max(26, uh * 0.55);
-  const by = groundY - uh - 11;
-  ctx.fillStyle = 'rgba(0,0,0,.55)';
-  ctx.fillRect(u.x - bw / 2, by, bw, 4);
-  ctx.fillStyle = u.team === 0 ? '#4dd35c' : '#ff4d4d';
-  ctx.fillRect(u.x - bw / 2, by, bw * Math.max(0, u.hp / u.maxHp), 4);
-
-  if (u.atkAnim > 0 && u.range > 100){
-    ctx.save();
-    ctx.strokeStyle = u.team === 0 ? 'rgba(120,255,150,.85)' : 'rgba(255,140,140,.85)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(u.x + (faceLeft ? -8 : 8), groundY - uh * 0.62, uh * 0.34, -Math.PI / 3, Math.PI / 3);
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-
-function drawBackground(){
-  const bg = IMG.battlefield;
-  if (bg && bg.width){
-    const ir = bg.width / bg.height;
-    const cr = w / h;
-    let dw, dh;
-    if (cr > ir) { dw = w; dh = w / ir; } else { dh = h; dw = h * ir; }
-    ctx.drawImage(bg, (w - dw) / 2, (h - dh) / 2, dw, dh);
-    ctx.fillStyle = 'rgba(120,180,80,.14)';
-    ctx.fillRect(0, h * 0.72, w, h * 0.28);
-  } else {
-    ctx.fillStyle = '#8fc76a';
-    ctx.fillRect(0, 0, w, h);
-  }
-}
-
-function drawStatues(){
-  const sh = h * 0.36;
-
-  drawSprite('statue', 74, h * 0.80, sh, false, false);
-  ctx.fillStyle = 'rgba(63,174,75,.8)';
-  ctx.beginPath(); ctx.ellipse(74, h * 0.80 - 2, sh * 0.16, sh * 0.028, 0, 0, Math.PI * 2); ctx.fill();
-
-  drawSprite('statue', w - 74, h * 0.80, sh, true, false);
-  ctx.fillStyle = 'rgba(212,58,58,.8)';
-  ctx.beginPath(); ctx.ellipse(w - 74, h * 0.80 - 2, sh * 0.16, sh * 0.028, 0, 0, Math.PI * 2); ctx.fill();
-
-  ctx.save();
-  ctx.fillStyle = 'rgba(255,210,77,.9)';
-  ctx.beginPath(); ctx.arc(w / 2, h * 0.752, 17, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#a8790f'; ctx.lineWidth = 3; ctx.stroke();
-  ctx.fillStyle = '#6b4c07'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
-  ctx.fillText('金矿', w / 2, h * 0.752 + 5);
-  ctx.restore();
-}
-
-/* ---------- 逻辑 ---------- */
-function update(){
-  if (Math.random() < 0.005) aiSpawn();
-
-  for (let i = units.length - 1; i >= 0; i--){
-    const u = units[i];
-    if (u.hp <= 0){ units.splice(i, 1); continue; }
-
-    let target = null, minD = Infinity;
-    for (const o of units){
-      if (o.team !== u.team && o.hp > 0){
-        const d = Math.abs(o.x - u.x);
-        if (d < minD){ minD = d; target = o; }
-      }
-    }
-
-    u.attackCd = Math.max(0, u.attackCd - 1);
-    u.hitFlash = Math.max(0, u.hitFlash - 1);
-    u.atkAnim = Math.max(0, u.atkAnim - 1);
-    u.anim++;
-
-    if (target){
-      if (minD <= u.range){
-        if (u.attackCd <= 0){
-          target.hp -= u.dmg * target.def;
-          target.hitFlash = 10;
-          u.attackCd = u.baseCd;
-          u.atkAnim = 14;
-        }
-      } else {
-        u.x += (target.x > u.x ? 1 : -1) * u.speed;
-      }
-    } else {
-      if (u.team === 0 && gameMode === 'attack') u.x += u.speed;
-      if (u.team === 1) u.x -= u.speed;
-    }
-
-    if (u.team === 0 && u.x > w - 160 && u.attackCd <= 0){
-      enemyHp -= u.dmg * 0.6; u.attackCd = u.baseCd; u.atkAnim = 14;
-    }
-    if (u.team === 1 && u.x < 160 && u.attackCd <= 0){
-      homeHp -= u.dmg * 0.6; u.attackCd = u.baseCd; u.atkAnim = 14;
-    }
-  }
-
-  for (const u of units){
-    if (u.type === 'miner' && u.team === 0 && Math.random() < 0.010) gold += 6;
-  }
-
-  updateUI();
-}
-
-function updateUI(){
-  document.getElementById('gold').textContent = gold;
-  document.getElementById('pop').textContent = getPop();
-  document.getElementById('homeHp').textContent = Math.max(0, Math.round(homeHp));
-  document.getElementById('enemyHp').textContent = Math.max(0, Math.round(enemyHp));
-  updateButtons();
-
-  if (homeHp <= 0 || enemyHp <= 0){
-    if (!gameRun) return;
-    gameRun = false;
-    const msg = homeHp <= 0 ? '你输了：我方雕像被摧毁' : '你赢了：敌方雕像被摧毁';
-    setTimeout(() => { alert(msg); backMenu(); }, 150);
-  }
-}
-
-function draw(){
-  ctx.clearRect(0, 0, w, h);
-  drawBackground();
-  drawStatues();
-  units.sort((a, b) => a.x - b.x);
-  for (const u of units) drawUnit(u);
-}
-
-function loop(){
-  if (!gameRun) return;
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-
-window.addEventListener('resize', () => { if (gameRun) resize(); });
-
-buildBars();
-buildShop();
-loadAssets();
-resize();
-</script>
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>
