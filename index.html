@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>火柴人战争</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+html,body{height:100%;overflow:hidden;background:#111;touch-action:none;user-select:none}
+#mainMenu{position:absolute;inset:0;background:#2a2a2a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200}
+#mainMenu h1{color:#f4d16b;font-size:44px;margin-bottom:10px;letter-spacing:2px}
+#mainMenu .sub{color:#bbb;margin-bottom:30px;font-size:14px;text-align:center;padding:0 20px}
+.menuBtn{width:220px;padding:14px;margin:6px;font-size:20px;border:none;border-radius:8px;background:#8b4513;color:#fff}
+#gameUI{display:none;position:absolute;inset:0}
+#topBar{height:44px;background:#333;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:14px}
+#canvas{width:100%;height:calc(100% - 120px);display:block;background:#7fc76a}
+#bottomBar{height:76px;background:#222;display:flex;align-items:center;padding:6px 8px;gap:6px;overflow-x:auto;border-top:2px solid #444}
+.unitIcon{width:64px;height:64px;border-radius:10px;background:#3a3a3a;border:2px solid #555;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-size:11px;flex:0 0 auto}
+.unitIcon .pic{width:40px;height:40px}
+.unitIcon .cost{color:#ffd24d;font-weight:bold;font-size:10px}
+.unitIcon.disabled{filter:grayscale(1) brightness(0.4)}
+#shopBtn,#upgradeBtn{width:64px;height:64px;border-radius:10px;background:#6b4423;border:2px solid #8b5a2b;color:#fff;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:0 0 auto}
+#controlBtns{position:absolute;bottom:82px;right:8px;display:flex;gap:6px}
+.smallBtn{padding:7px 10px;border:none;border-radius:6px;color:#fff;font-size:14px}
+.attackBtn{background:#c0392b}
+.defendBtn{background:#2c6faa}
+.menuBtn2{background:#555}
+#shopPanel,#upgradePanel{display:none;position:absolute;left:0;right:0;bottom:80px;background:#222;border-top:2px solid #555;padding:10px;z-index:150;max-height:60vh;overflow-y:auto}
+#shopPanel h3,#upgradePanel h3{color:#f4d16b;margin-bottom:8px;font-size:16px}
+.shopGrid,.upgradeGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.shopItem,.upgradeItem{background:#333;border:2px solid #555;border-radius:10px;padding:8px;color:#fff;text-align:center}
+.shopItem .bigPic,.upgradeItem .bigPic{width:52px;height:52px;margin:0 auto 4px;display:block}
+.shopItem .name,.upgradeItem .name{font-size:14px;color:#f4d16b}
+.shopItem .price,.upgradeItem .price{font-size:13px;color:#ffd24d}
+.shopItem .desc,.upgradeItem .desc{font-size:11px;color:#bbb;margin-top:4px}
+.shopItem.disabled,.upgradeItem.disabled{filter:grayscale(1) brightness(0.4)}
+.upgradeRow{display:flex;gap:4px;margin-top:6px;justify-content:center}
+.upgradeRow button{font-size:10px;padding:4px 5px;border:none;border-radius:3px;flex:1}
+.btnAtk{background:#b83232;color:#fff}
+.btnDef{background:#2b702b;color:#fff}
+.btnSpd{background:#2b5899;color:#fff}
+#closeShop,#closeUpgrade{margin-top:10px;width:100%;padding:10px;background:#555;color:#fff;border:none;border-radius:6px;font-size:16px}
+</style>
+</head>
+<body>
+
+<div id="mainMenu">
+  <h1>火柴人战争</h1>
+  <div class="sub">兵种升级 · 图标商店 · 绿色我方阵营</div>
+  <button class="menuBtn" onclick="startGame()">开始战斗</button>
+  <button class="menuBtn" onclick="alert('矿工挖矿，商店出兵，升级面板强化兵种。摧毁红色雕像获胜！')">玩法说明</button>
+</div>
+
+<div id="gameUI">
+  <div id="topBar">
+    <span>金币 <span id="gold">120</span></span>
+    <span>人口 <span id="pop">0</span>/20</span>
+    <span style="color:#6ee07a">我方雕像 <span id="homeHp">1600</span></span>
+    <span style="color:#ff6b6b">敌方雕像 <span id="enemyHp">1600</span></span>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <div id="controlBtns">
+    <button class="smallBtn attackBtn" onclick="setMode('attack')">进攻</button>
+    <button class="smallBtn defendBtn" onclick="setMode('defend')">固守</button>
+    <button class="smallBtn menuBtn2" onclick="backMenu()">菜单</button>
+  </div>
+
+  <div id="bottomBar">
+    <button id="shopBtn" onclick="openShop()">
+      <svg class="pic" viewBox="0 0 64 64">
+        <rect x="6" y="20" width="52" height="34" fill="#8b4513" stroke="#f4d16b" stroke-width="3"/>
+        <path d="M6 20 L32 6 L58 20" fill="#a0522d" stroke="#f4d16b" stroke-width="3"/>
+        <circle cx="20" cy="38" r="4" fill="#ffd24d"/>
+        <circle cx="32" cy="38" r="4" fill="#ffd24d"/>
+        <circle cx="44" cy="38" r="4" fill="#ffd24d"/>
+      </svg>
+      <span>商店</span>
+    </button>
+    <button id="upgradeBtn" onclick="openUpgrade()">
+      <svg class="pic" viewBox="0 0 64 64">
+        <path d="M32 8 L44 24 L36 24 L36 48 L28 48 L28 24 L20 24 Z" fill="#ffd24d"/>
+      </svg>
+      <span>升级</span>
+    </button>
+  </div>
+
+  <div id="shopPanel">
+    <h3>兵种商店</h3>
+    <div class="shopGrid" id="shopGrid"></div>
+    <button id="closeShop" onclick="closeShop()">关闭商店</button>
+  </div>
+
+  <div id="upgradePanel">
+    <h3>兵种升级面板</h3>
+    <div class="upgradeGrid" id="upgradeGrid"></div>
+    <button id="closeUpgrade" onclick="closeUpgrade()">关闭升级</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let w = 0, h = 0;
+
+let gold = 120;
+let homeHp = 1600, enemyHp = 1600;
+let units = [];
+let gameMode = 'defend';
+let gameRun = false;
+const popMax = 20;
+
+const unitCfg = {
+  miner:  { name:'矿工',   cost:25,  hp:100, speed:1.1, dmg:0,  range:0,   radius:11, baseCd:0 },
+  sword:  { name:'剑士',   cost:50,  hp:200, speed:1.7, dmg:14, range:24,  radius:12, baseCd:70 },
+  spear:  { name:'矛士',   cost:75,  hp:280, speed:1.3, dmg:22, range:34,  radius:13, baseCd:80 },
+  archer: { name:'弓箭手', cost:100, hp:140, speed:1.4, dmg:16, range:150, radius:12, baseCd:90 },
+  stone:  { name:'投石兵', cost:140, hp:180, speed:1.2, dmg:24, range:170, radius:12, baseCd:100 },
+  giant:  { name:'巨人',   cost:175, hp:700, speed:0.65,dmg:40, range:30,  radius:17, baseCd:110 },
+  wizard: { name:'巫师',   cost:220, hp:160, speed:1.0, dmg:30, range:120, radius:13, baseCd:95 }
+};
+
+const ICONS = {
+  miner: '<svg class="bigPic" viewBox="0 0 64 64"><circle cx="32" cy="18" r="8" fill="#ffd700" stroke="#000" stroke-width="2"/><line x1="32" y1="26" x2="32" y2="44" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="20" y2="22" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="44" y2="22" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="24" y2="56" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="40" y2="56" stroke="#000" stroke-width="3"/><rect x="44" y="24" width="14" height="4" fill="#888" stroke="#000" stroke-width="2"/></svg>',
+  sword: '<svg class="bigPic" viewBox="0 0 64 64"><circle cx="32" cy="18" r="8" fill="#fff" stroke="#000" stroke-width="2"/><line x1="32" y1="26" x2="32" y2="44" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="18" y2="24" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="48" y2="24" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="24" y2="56" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="40" y2="56" stroke="#000" stroke-width="3"/><line x1="48" y1="20" x2="60" y2="8" stroke="#ddd" stroke-width="3"/></svg>',
+  spear: '<svg class="bigPic" viewBox="0 0 64 64"><circle cx="32" cy="18" r="8" fill="#fff" stroke="#000" stroke-width="2"/><line x1="32" y1="26" x2="32" y2="44" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="18" y2="24" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="48" y2="24" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="24" y2="56" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="40" y2="56" stroke="#000" stroke-width="3"/><line x1="44" y1="22" x2="62" y2="10" stroke="#8b4513" stroke-width="3"/><polygon points="62,10 56,14 60,18" fill="#ddd"/></svg>',
+  archer: '<svg class="bigPic" viewBox="0 0 64 64"><circle cx="32" cy="18" r="8" fill="#fff" stroke="#000" stroke-width="2"/><line x1="32" y1="26" x2="32" y2="44" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="18" y2="24" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="48" y2="24" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="24" y2="56" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="40" y2="56" stroke="#000" stroke-width="3"/><path d="M44 14 A14 14 0 0 1 44 40" fill="none" stroke="#8b4513" stroke-width="3"/></svg>',
+  stone: '<svg class="bigPic" viewBox="0 0 64 64"><circle cx="32" cy="18" r="8" fill="#fff" stroke="#000" stroke-width="2"/><line x1="32" y1="26" x2="32" y2="44" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="18" y2="24" stroke="#000" stroke-width="3"/><line x1="32" y1="30" x2="48" y2="24" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="24" y2="56" stroke="#000" stroke-width="3"/><line x1="32" y1="44" x2="40" y2="56" stroke="#000" stroke-width="3"/><circle cx="52" cy="20" r="6" fill="#888" stroke="#000" stroke-width="2"/></svg>',
+  giant: '<svg class="bigPic" viewBox="0 0 64 64"><circle cx="32" cy="14" r="10" fill="#fff" stroke="#000" stroke-width="2"/><line x1="32" y1="24" x2="32" y2="46" stroke="#000" stroke-width="4"/><line x1="32" y1="28" x2="16" y2="22" stroke="#000" stroke-width="4"/><line x1="32" y1="28" x2="52" y2="22" stroke="#000" stroke-width="4"/><line x1="32" y1="46" x2="22" y2="60" stroke="#000" stroke-width="4"/><line x1="32" y1="46" x2="42" y2="60" stroke="#000" stroke-width="4"/><line x1="52" y1="18" x2="60" y2="6" stroke="#bbb" stroke-width="4"/></svg>',
+  wizard: '<svg class="bigPic" viewBox="0 0 64 64"><polygon points="32,4 20,20 44,20" fill="#9966ff" stroke="#000" stroke-width="2"/><circle cx="32" cy="22" r="8" fill="#fff" stroke="#000" stroke-width="2"/><line x1="32" y1="30" x2="32" y2="46" stroke="#000" stroke-width="3"/><line x1="32" y1="34" x2="18" y2="28" stroke="#000" stroke-width="3"/><line x1="32" y1="34" x2="48" y2="28" stroke="#000" stroke-width="3"/><line x1="32" y1="46" x2="24" y2="58" stroke="#000" stroke-width="3"/><line x1="32" y1="46" x2="40" y2="58" stroke="#000" stroke-width="3"/><line x1="48" y1="24" x2="60" y2="12" stroke="#ffd24d" stroke-width="3"/></svg>'
+};
+
+const UP_COST = 80;
+const upgradeData = {};
+for (const k in unitCfg) upgradeData[k] = { atk:0, def:0, spd:0 };
+
+function resize(){
+  if (!canvas) return;
+  w = canvas.clientWidth;
+  h = canvas.clientHeight;
+  canvas.width = w;
+  canvas.height = h;
+}
+
+function buildBars(){
+  const bar = document.getElementById('bottomBar');
+  for (const key in unitCfg){
+    const c = unitCfg[key];
+    const btn = document.createElement('button');
+    btn.className = 'unitIcon';
+    btn.dataset.unit = key;
+    btn.onclick = () => spawn(key);
+    btn.innerHTML = ICONS[key] + '<span>' + c.name + '</span><span class="cost">' + c.cost + '</span>';
+    bar.appendChild(btn);
+  }
+}
+
+function buildShop(){
+  const g = document.getElementById('shopGrid');
+  g.innerHTML = '';
+  const desc = { miner:'产金币', sword:'近战输出', spear:'高血量', archer:'远程输出', stone:'远程重击', giant:'高攻高血', wizard:'魔法输出' };
+  for (const key in unitCfg){
+    const c = unitCfg[key];
+    const d = document.createElement('div');
+    d.className = 'shopItem';
+    d.onclick = () => spawn(key);
+    d.innerHTML = ICONS[key] + '<div class="name">' + c.name + '</div><div class="price">' + c.cost + ' 金币</div><div class="desc">' + desc[key] + '</div>';
+    g.appendChild(d);
+  }
+}
+
+function refreshUpgradeUI(){
+  const g = document.getElementById('upgradeGrid');
+  g.innerHTML = '';
+  for (const key in upgradeData){
+    const lv = upgradeData[key];
+    const d = document.createElement('div');
+    d.className = 'upgradeItem';
+    d.innerHTML = ICONS[key] + '<div class="name">' + unitCfg[key].name + '</div>' +
+      '<div class="desc">攻 Lv' + lv.atk + ' · 防 Lv' + lv.def + ' · 速 Lv' + lv.spd + '</div>' +
+      '<div class="upgradeRow">' +
+      '<button class="btnAtk" onclick="doUp(\'' + key + '\',\'atk\')">攻+' + UP_COST + '</button>' +
+      '<button class="btnDef" onclick="doUp(\'' + key + '\',\'def\')">防+' + UP_COST + '</button>' +
+      '<button class="btnSpd" onclick="doUp(\'' + key + '\',\'spd\')">速+' + UP_COST + '</button>' +
+      '</div>';
+    g.appendChild(d);
+  }
+}
+
+function doUp(type, stat){
+  if (gold < UP_COST) { flashText('金币不足'); return; }
+  gold -= UP_COST;
+  upgradeData[type][stat]++;
+  refreshUpgradeUI();
+  updateUI();
+}
+
+function getBonus(t){
+  const u = upgradeData[t];
+  return {
+    dmgMul: 1 + u.atk * 0.15,
+    defMul: Math.max(0.35, 1 - u.def * 0.12),
+    cdMul: Math.max(0.45, 1 - u.spd * 0.10)
+  };
+}
+
+function startGame(){
+  document.getElementById('mainMenu').style.display = 'none';
+  document.getElementById('gameUI').style.display = 'block';
+  resetGame();
+  resize();
+  gameRun = true;
+  refreshUpgradeUI();
+  loop();
+}
+
+function backMenu(){
+  gameRun = false;
+  document.getElementById('mainMenu').style.display = 'flex';
+  document.getElementById('gameUI').style.display = 'none';
+}
+
+function resetGame(){
+  gold = 120;
+  homeHp = 1600;
+  enemyHp = 1600;
+  units = [];
+  gameMode = 'defend';
+}
+
+function setMode(m){ gameMode = m; }
+function openShop(){ document.getElementById('shopPanel').style.display = 'block'; }
+function closeShop(){ document.getElementById('shopPanel').style.display = 'none'; }
+function openUpgrade(){ refreshUpgradeUI(); document.getElementById('upgradePanel').style.display = 'block'; }
+function closeUpgrade(){ document.getElementById('upgradePanel').style.display = 'none'; }
+
+function getPop(){ return units.filter(u => u.team === 0).length; }
+
+function spawn(type){
+  const cfg = unitCfg[type];
+  if (gold < cfg.cost) { flashText('金币不够'); return; }
+  if (getPop() >= popMax) { flashText('人口已满'); return; }
+  const b = getBonus(type);
+  gold -= cfg.cost;
+  units.push({
+    type: type, team: 0, x: 100, y: h * 0.70,
+    hp: cfg.hp, maxHp: cfg.hp,
+    speed: cfg.speed,
+    dmg: cfg.dmg * b.dmgMul,
+    range: cfg.range,
+    radius: cfg.radius,
+    attackCd: cfg.baseCd * b.cdMul,
+    baseCd: cfg.baseCd * b.cdMul,
+    def: b.defMul,
+    anim: 0, hitFlash: 0, atkAnim: 0
+  });
+  updateUI();
+}
+
+function aiSpawn(){
+  const list = ['sword','spear','archer'];
+  const t = list[Math.floor(Math.random() * list.length)];
+  const cfg = unitCfg[t];
+  units.push({
+    type: t, team: 1, x: w - 100, y: h * 0.70,
+    hp: cfg.hp, maxHp: cfg.hp,
+    speed: cfg.speed, dmg: cfg.dmg, range: cfg.range,
+    radius: cfg.radius,
+    attackCd: cfg.baseCd, baseCd: cfg.baseCd,
+    def: 1, anim: 0, hitFlash: 0, atkAnim: 0
+  });
+}
+
+function flashText(msg){
+  const el = document.getElementById('gold');
+  const oldColor = el.style.color;
+  el.style.color = '#ffd24d';
+  el.textContent = msg;
+  setTimeout(() => { el.style.color = oldColor; updateUI(); }, 600);
+}
+
+function updateButtons(){
+  document.querySelectorAll('.unitIcon').forEach(btn => {
+    const cfg = unitCfg[btn.dataset.unit];
+    if (gold < cfg.cost || getPop() >= popMax) btn.classList.add('disabled');
+    else btn.classList.remove('disabled');
+  });
+}
+
+function drawStickman(u){
+  const r = u.radius;
+  const bounce = (u.anim % 24 < 12) ? 0 : 2;
+  const bodyColor = u.team === 0 ? '#3fae4b' : '#d43a3a';
+
+  ctx.save();
+  ctx.translate(u.x, u.y);
+  ctx.strokeStyle = u.hitFlash > 0 ? '#ffffff' : bodyColor;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+
+  ctx.beginPath(); ctx.arc(0, -r * 2 + bounce, r * 0.72, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, -r * 1.3 + bounce); ctx.lineTo(0, r * 0.4 + bounce); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, r * 0.4 + bounce); ctx.lineTo(-r * 0.6, r * 1.6);
+  ctx.moveTo(0, r * 0.4 + bounce); ctx.lineTo(r * 0.6, r * 1.6);
+  ctx.stroke();
+
+  ctx.beginPath();
+  if (u.atkAnim > 0) { ctx.moveTo(0, -r * 0.8 + bounce); ctx.lineTo(r * 1.5, -r * 1.7 + bounce); }
+  else { ctx.moveTo(0, -r * 0.8 + bounce); ctx.lineTo(-r * 1.2, -r * 1.4 + bounce); }
+  ctx.stroke();
+
+  if (u.type === 'miner') {
+    ctx.fillStyle = '#8d8d8d';
+    ctx.fillRect(r * 0.7, -r * 1.5 + bounce, r * 1.1, r * 0.35);
+  } else if (u.type === 'archer') {
+    ctx.beginPath(); ctx.arc(r * 0.9, -r * 1.0 + bounce, r * 0.85, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+  } else if (u.type === 'spear') {
+    ctx.strokeStyle = '#8b4513';
+    ctx.beginPath(); ctx.moveTo(r * 0.4, -r * 1.1 + bounce); ctx.lineTo(r * 2, -r * 2.1 + bounce); ctx.stroke();
+  } else if (u.type === 'giant') {
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(r * 0.9, -r * 1.1 + bounce); ctx.lineTo(r * 1.9, -r * 2.2 + bounce); ctx.stroke();
+  } else if (u.type === 'wizard') {
+    ctx.fillStyle = '#9966ff';
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 2.5 + bounce); ctx.lineTo(-r * 0.8, -r * 1.7 + bounce); ctx.lineTo(r * 0.8, -r * 1.7 + bounce);
+    ctx.closePath(); ctx.fill();
+  } else if (u.type === 'stone') {
+    ctx.fillStyle = '#7a7a7a';
+    ctx.beginPath(); ctx.arc(r * 1.0, -r * 1.3 + bounce, r * 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.restore();
+
+  const bw = 30;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(u.x - bw / 2, u.y - r * 2.6, bw, 4);
+  ctx.fillStyle = u.team === 0 ? '#4caf50' : '#ff4444';
+  ctx.fillRect(u.x - bw / 2, u.y - r * 2.6, bw * (u.hp / u.maxHp), 4);
+}
+
+function update(){
+  if (Math.random() < 0.004) aiSpawn();
+
+  for (let i = units.length - 1; i >= 0; i--){
+    const u = units[i];
+    if (u.hp <= 0){ units.splice(i, 1); continue; }
+
+    let target = null, minD = Infinity;
+    for (const o of units){
+      if (o.team !== u.team && o.hp > 0){
+        const d = Math.abs(o.x - u.x);
+        if (d < minD){ minD = d; target = o; }
+      }
+    }
+
+    u.attackCd = Math.max(0, u.attackCd - 1);
+    u.hitFlash = Math.max(0, u.hitFlash - 1);
+    u.atkAnim = Math.max(0, u.atkAnim - 1);
+    u.anim++;
+
+    if (target){
+      if (minD <= u.range){
+        if (u.attackCd <= 0){
+          target.hp -= u.dmg * target.def;
+          target.hitFlash = 10;
+          u.attackCd = u.baseCd;
+          u.atkAnim = 14;
+        }
+      } else {
+        u.x += (target.x > u.x ? 1 : -1) * u.speed;
+      }
+    } else {
+      if (u.team === 0 && gameMode === 'attack') u.x += u.speed;
+      if (u.team === 1) u.x -= u.speed;
+    }
+
+    if (u.team === 0 && u.x > w - 130){
+      if (u.attackCd <= 0){ enemyHp -= u.dmg * 0.6; u.attackCd = u.baseCd; u.atkAnim = 14; }
+    }
+    if (u.team === 1 && u.x < 130){
+      if (u.attackCd <= 0){ homeHp -= u.dmg * 0.6; u.attackCd = u.baseCd; u.atkAnim = 14; }
+    }
+  }
+
+  for (const u of units){
+    if (u.type === 'miner' && u.team === 0 && Math.random() < 0.012) gold += 8;
+  }
+
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById('gold').innerText = gold;
+  document.getElementById('pop').innerText = getPop();
+  document.getElementById('homeHp').innerText = Math.max(0, homeHp);
+  document.getElementById('enemyHp').innerText = Math.max(0, enemyHp);
+  updateButtons();
+
+  if (homeHp <= 0 || enemyHp <= 0){
+    gameRun = false;
+    setTimeout(() => alert(homeHp <= 0 ? '你输了' : '你赢了'), 200);
+  }
+}
+
+function draw(){
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#7fc76a';
+  ctx.fillRect(0, h * 0.62, w, h * 0.38);
+
+  ctx.strokeStyle = '#5ba04a';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 10; i++){
+    ctx.beginPath();
+    ctx.moveTo(i * 120, h * 0.72);
+    ctx.lineTo(i * 120 + 60, h * 0.72);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#4caf50'; ctx.fillRect(50, h * 0.46, 50, 90);
+  ctx.fillStyle = '#2b702b'; ctx.fillRect(58, h * 0.38, 34, 14);
+  ctx.fillStyle = '#72d276'; ctx.fillRect(60, h * 0.48, 30, 10);
+
+  ctx.fillStyle = '#9b3c3c'; ctx.fillRect(w - 100, h * 0.46, 50, 90);
+  ctx.fillStyle = '#7a2a2a'; ctx.fillRect(w - 92, h * 0.38, 34, 14);
+  ctx.fillStyle = '#c45050'; ctx.fillRect(w - 90, h * 0.48, 30, 10);
+
+  ctx.fillStyle = '#ffd24d';
+  ctx.beginPath(); ctx.arc(w / 2, h * 0.71, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#b8860b'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#b8860b'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center';
+  ctx.fillText('金矿', w / 2, h * 0.68);
+
+  const sorted = units.slice().sort((a, b) => a.y - b.y);
+  for (const u of sorted) drawStickman(u);
+}
+
+function loop(){
+  if (!gameRun) return;
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', () => { if (gameRun) resize(); });
+buildBars();
+buildShop();
+resize();
+refreshUpgradeUI();
+</script>
+</body>
+</html>
