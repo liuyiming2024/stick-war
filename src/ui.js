@@ -1,6 +1,6 @@
-import { CONFIG, UNIT_ORDER, assetPath } from './config.js';
-import { upgradeLevels, countTeam, isTerminal } from './state.js';
-import { spawnPlayer, doUpgrade, setMode } from './simulation.js';
+import { CONFIG, UNIT_ORDER, assetPath, upgradeStats } from './config.js';
+import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js';
+import { spawnPlayer, doUpgrade, setMode, cancelTraining } from './simulation.js';
 
 const C = CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -15,7 +15,8 @@ export function createUI(state, actions) {
     shopPanel: $('shopPanel'), upgradePanel: $('upgradePanel'),
     backdrop: $('panelBackdrop'),
     closeShopX: $('closeShopX'), closeUpgradeX: $('closeUpgradeX'),
-    attackBtn: $('attackBtn'), defendBtn: $('defendBtn'), pauseBtn: $('pauseBtn'),
+    attackBtn: $('attackBtn'), defendBtn: $('defendBtn'), garrisonBtn: $('garrisonBtn'),
+    pauseBtn: $('pauseBtn'), difficulty: $('difficulty'), queueStrip: $('queueStrip'),
     overlay: $('pauseOverlay'), toastEl: $('toast'),
   };
   const unitButtons = new Map();
@@ -40,6 +41,7 @@ export function createUI(state, actions) {
   function spawn(type) {
     const r = spawnPlayer(state, type);
     if (!r.ok) toast(r.reason);
+    else toast(`${C.units[type].name} 训练中 ${r.trainSec}s（点队列可取消退款）`);
     sync();
   }
 
@@ -51,7 +53,9 @@ export function createUI(state, actions) {
     toast(`${C.units[type].name} ${statName(stat)} → ${upgradeLevels(state, type)[stat]} 级`);
   }
 
-  function statName(s) { return { atk: '攻击', def: '防御', spd: '攻速' }[s]; }
+  function statName(s) {
+    return { atk: '攻击', def: '防御', spd: '攻速', bag: '背包', pick: '镐' }[s] ?? s;
+  }
 
   function mode(m) {
     if (setMode(state, m)) sync();
@@ -70,6 +74,33 @@ export function createUI(state, actions) {
     el.upgradePanel.hidden = which !== 'upgrade';
     el.backdrop.hidden = false;
     if (which === 'upgrade') refreshUpgrade();
+  }
+
+  let queueSignature = '';
+  function syncQueue() {
+    const items = state.training.filter((t) => t.team === 0);
+    const signature = items.map((t) =>
+      `${t.id}:${t.type}:${Math.ceil(Math.max(0, t.due - state.elapsed) * 10)}`).join('|');
+    if (signature === queueSignature) return;
+    queueSignature = signature;
+    el.queueStrip.innerHTML = '';
+    for (const t of items) {
+      const cfg = C.units[t.type];
+      const remaining = Math.max(0, t.due - state.elapsed);
+      const pct = Math.max(0, Math.min(100, (1 - remaining / cfg.trainSec) * 100));
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'queueItem';
+      btn.title = `取消训练并退还 ${cfg.cost} 金币`;
+      btn.innerHTML = `<span>${cfg.name}</span><span class="queueBar"><i style="width:${pct}%"></i></span>` +
+        `<span>${remaining.toFixed(1)}s</span><span class="cancel">×</span>`;
+      btn.addEventListener('click', () => {
+        const r = cancelTraining(state, t.id);
+        if (r.ok) toast(`已取消 ${C.units[r.type].name} 训练，退还 ${r.refund} 金币`);
+        sync();
+      });
+      el.queueStrip.appendChild(btn);
+    }
   }
 
   function buildUnitBar() {
@@ -108,14 +139,15 @@ export function createUI(state, actions) {
       const lv = upgradeLevels(state, key);
       const card = document.createElement('div');
       card.className = 'upgradeItem';
+      const levels = upgradeStats(key).map((s) => `${statName(s)} ${lv[s] ?? 0}`).join(' · ');
       card.innerHTML = `<img src="${assetPath(key)}" alt=""><div class="name">${cfg.name}</div>` +
-        `<div class="desc">攻 ${lv.atk} · 防 ${lv.def} · 速 ${lv.spd}</div>`;
+        `<div class="desc">${levels}</div>`;
       const row = document.createElement('div');
       row.className = 'upgradeRow';
-      for (const stat of ['atk', 'def', 'spd']) {
+      for (const stat of upgradeStats(key)) {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = { atk: 'btnAtk', def: 'btnDef', spd: 'btnSpd' }[stat];
+        b.className = { atk: 'btnAtk', def: 'btnDef', spd: 'btnSpd', bag: 'btnAtk', pick: 'btnDef' }[stat];
         b.textContent = `${statName(stat)}+${C.upgrade.cost}`;
         b.addEventListener('click', () => upgrade(key, stat));
         row.appendChild(b);
@@ -129,22 +161,22 @@ export function createUI(state, actions) {
   function sync() {
     const pop = countTeam(state, 0);
     setText(el.gold, 'gold', String(Math.round(state.gold)));
-    setText(el.pop, 'pop', String(pop));
+    setText(el.pop, 'pop', String(pop + pendingTeam(state, 0)));
     setText(el.homeHp, 'homeHp', String(Math.max(0, Math.round(state.homeHp))));
     setText(el.enemyHp, 'enemyHp', String(Math.max(0, Math.round(state.enemyHp))));
     const total = Math.floor(state.elapsed);
     setText(el.clock, 'clock', `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`);
 
     const playable = state.phase === 'playing';
-    const full = pop >= state.limits.popMax;
+    const full = pop + pendingTeam(state, 0) >= state.limits.popMax;
     for (const [key, btn] of unitButtons) {
       const disabled = !playable || full || state.gold < C.units[key].cost;
       if (btn.disabled !== disabled) btn.disabled = disabled;  // 真禁用，不只是置灰
     }
-    if (el.attackBtn.getAttribute('aria-pressed') !== String(state.gameMode === 'attack')) {
-      el.attackBtn.setAttribute('aria-pressed', String(state.gameMode === 'attack'));
-      el.defendBtn.setAttribute('aria-pressed', String(state.gameMode === 'defend'));
+    for (const [btn, mode] of [[el.attackBtn, 'attack'], [el.defendBtn, 'defend'], [el.garrisonBtn, 'garrison']]) {
+      btn.setAttribute('aria-pressed', String(state.gameMode === mode));
     }
+    syncQueue();
     el.pauseBtn.setAttribute('aria-pressed', String(state.phase === 'paused'));
     el.pauseBtn.textContent = state.phase === 'paused' ? '继续' : '暂停';
     for (const { key, stat, node } of upgradeButtons) {
@@ -167,6 +199,8 @@ export function createUI(state, actions) {
     el.gameUI.hidden = false;
     el.overlay.hidden = true;
     closePanels();
+    queueSignature = '__reset__';
+    el.queueStrip.innerHTML = '';
     refreshUpgrade();
     sync();
   }
@@ -222,9 +256,10 @@ export function createUI(state, actions) {
       '点 × 或按 Esc 返回主菜单，再来一局',
       () => actions.goMenu(),
       [
-        `用时 ${clock}`,
+        `用时 ${clock} · 难度 ${C.match.difficulties[state.difficulty].label}`,
         `我方出兵 ${state.stats.playerSpawned} · 运矿 ${state.stats.trips} 趟`,
-        `敌方出兵 ${state.stats.aiSpawned}`,
+        `敌方出兵 ${state.stats.aiSpawned} · 取消训练 ${state.stats.cancelled}`,
+        `城堡弓箭 ${state.stats.fortArrows} 发`,
       ],
     );
   }
@@ -253,15 +288,24 @@ export function createUI(state, actions) {
     }
     if (k === 'a' || k === 'A') { mode('attack'); e.preventDefault(); }
     else if (k === 'd' || k === 'D') { mode('defend'); e.preventDefault(); }
+    else if (k === 'g' || k === 'G') { mode('garrison'); e.preventDefault(); }
   }
 
   function bind() {
-    el.startBtn.addEventListener('click', () => actions.start());
-    el.helpBtn.addEventListener('click', () => toast('矿工往返金矿运钱；1–7 出兵；A/D 切换攻守；摧毁敌方雕像获胜'));
+    for (const [key, d] of Object.entries(C.match.difficulties)) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = d.label;
+      el.difficulty.appendChild(opt);
+    }
+    el.difficulty.value = state.difficulty;
+    el.startBtn.addEventListener('click', () => actions.start(el.difficulty.value));
+    el.helpBtn.addEventListener('click', () => toast('矿工就近挖自家矿脉；单位需要训练时间；A/D/G 进攻/固守/驻堡；点队列可取消退款'));
     $('menuBtn').addEventListener('click', () => actions.goMenu());
     el.pauseBtn.addEventListener('click', () => actions.togglePause());
     el.attackBtn.addEventListener('click', () => mode('attack'));
     el.defendBtn.addEventListener('click', () => mode('defend'));
+    el.garrisonBtn.addEventListener('click', () => mode('garrison'));
     $('shopBtn').addEventListener('click', () => openPanel('shop'));
     $('upgradeBtn').addEventListener('click', () => openPanel('upgrade'));
     // 每个面板都有两条退路：底部文字按钮 + 右上角 ×

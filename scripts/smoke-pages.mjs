@@ -74,8 +74,33 @@ try {
   const mineCount = await page.evaluate(() => window.__stickWar.mines().length);
   check('双侧矿脉已装配', mineCount === 6, `${mineCount} 个矿点`);
 
+  const diffCount = await page.locator('#difficulty option').count();
+  check('难度下拉含三档', diffCount === 3, `${diffCount} 项`);
+  await page.selectOption('#difficulty', 'hard');
   await page.click('#startBtn');
   check('主菜单 → 对局', await page.isVisible('#gameUI') && !(await page.isVisible('#mainMenu')));
+  check('难度选择已生效', (await page.evaluate(() => window.__stickWar.state.difficulty)) === 'hard');
+
+  // 训练队列：下单扣钱入队、点条目取消退款、不生成幽灵单位
+  const goldBefore = await page.evaluate(() => window.__stickWar.state.gold);
+  await page.locator('#unitBar .unitIcon').nth(3).click();  // 弓箭手，训练 8s
+  check('下单后训练队列可见', (await page.locator('#queueStrip .queueItem').count()) === 1);
+  const goldAfterOrder = await page.evaluate(() => window.__stickWar.state.gold);
+  check('下单即扣除金币', Math.abs(goldAfterOrder - (goldBefore - 100)) < 2,
+    `${goldBefore} → ${goldAfterOrder}`);
+  check('训练中单位未出场', (await page.evaluate(() => window.__stickWar.state.units.length)) === 0);
+  await page.click('#queueStrip .queueItem');
+  check('取消训练后队列清空', (await page.locator('#queueStrip .queueItem').count()) === 0);
+  const goldAfterCancel = await page.evaluate(() => window.__stickWar.state.gold);
+  check('取消训练全额退款', Math.abs(goldAfterCancel - goldBefore) < 2,
+    `${goldAfterOrder} → ${goldAfterCancel}`);
+
+  // 三指令：驻堡按钮可切换且状态机同步
+  await page.click('#garrisonBtn');
+  check('驻堡指令可切换', (await page.evaluate(() => window.__stickWar.state.gameMode)) === 'garrison');
+  check('驻堡按钮有选中态', (await page.getAttribute('#garrisonBtn', 'aria-pressed')) === 'true');
+  await page.click('#defendBtn');
+  check('可切回固守', (await page.evaluate(() => window.__stickWar.state.gameMode)) === 'defend');
 
   // 商店：打开、有 ×、× 能退、Esc 能退、点遮罩能退
   await page.click('#shopBtn');
@@ -98,6 +123,9 @@ try {
   check('升级面板有可见的 ×', await page.isVisible('#closeUpgradeX'));
   const cards = await page.locator('#upgradeGrid .upgradeItem').count();
   check('升级面板渲染全部兵种卡片', cards === 7, `${cards} 张`);
+  const minerCard = (await page.locator('#upgradeGrid .upgradeItem').first().innerText());
+  check('矿工升级为背包/镐/移速而非攻防', minerCard.includes('背包') &&
+    minerCard.includes('镐') && !minerCard.includes('攻击'));
   await page.click('#closeUpgradeX');
   check('升级面板 × 可退出', !(await page.isVisible('#upgradePanel')));
 

@@ -29,7 +29,7 @@ test('step 对 dt 线性一致：60 步/秒 与 120 步/秒 得到同一份矿�
   run(b, 12, 1 / 120);
   assert.equal(a.stats.trips, b.stats.trips);
   assert.ok(a.stats.trips >= 1, '12 秒内至少完成一趟运矿');
-  assert.equal(a.gold, b.gold);
+  assert.ok(Math.abs(a.gold - b.gold) < 1e-6, `金币差 ${Math.abs(a.gold - b.gold)}`);
   assert.equal(a.units.length, b.units.length);
   assert.ok(Math.abs(a.elapsed - b.elapsed) < 1e-9);
   assert.ok(Math.abs(a.units[0].mineTimer - b.units[0].mineTimer) < 1e-9);
@@ -60,31 +60,33 @@ test('时间量全部按秒缩放：位移、冷却、AI 出兵都不再按帧�
   const d = playing();
   d.aiGold = 100000;
   run(d, 3.0, 1 / 60);
-  assert.equal(d.stats.aiSpawned, 0, '3 秒短于首个出兵间隔');
+  assert.equal(d.training.length, 0, '3 秒短于首个出兵间隔');
   run(d, 0.5, 1 / 60);
-  assert.ok(d.stats.aiSpawned >= 1, '出兵由秒级计时器驱动，而非每帧随机');
+  assert.ok(d.training.length >= 1, '出兵由秒级计时器驱动，而非每帧随机');
 });
 
 test('矿工真的往返运钱，而不是站着刷随机数', () => {
   const s = quiet(playing());
   s.gold = 1000;
-  spawnPlayer(s, 'miner');
+  const miner = spawnUnit(s, 'miner', 0, null);
   const start = s.gold;
   run(s, 30, 1 / 60);
   assert.ok(s.stats.trips >= 2, `实际完成 ${s.stats.trips} 趟`);
-  assert.equal(s.gold, start + s.stats.trips * C.economy.goldPerTrip);
-  assert.ok(['toMine', 'mining', 'toHome'].includes(s.units[0].job));
+  const expected = start + C.economy.castleGoldPerSec * s.elapsed +
+    s.stats.trips * C.economy.goldPerTrip;
+  assert.ok(Math.abs(s.gold - expected) < 1e-6, `金币 ${s.gold} 应等于 ${expected}`);
+  assert.ok(['toMine', 'mining', 'toHome'].includes(miner.job));
 });
 
 test('矿工不参与攻击：不会把敌人的受击闪白每帧重置', () => {
   const s = quiet(playing());
-  spawnPlayer(s, 'miner');
+  const miner = spawnUnit(s, 'miner', 0, null);
   const enemy = spawnUnit(s, 'sword', 1, null);
-  enemy.x = s.units[0].x + 5;
+  enemy.x = miner.x + 5;
   enemy.hitFlash = 0;
   run(s, 0.5, 1 / 60);
   assert.equal(enemy.hitFlash, 0);
-  assert.equal(s.units.find((u) => u.kind === 'miner').dmg, 0);
+  assert.equal(miner.dmg, 0);
 });
 
 test('胜负状态机：终局只触发一次，之后不再推进模拟', () => {
@@ -209,15 +211,18 @@ test('AI 兵种按解锁时间开放，出兵节奏随时间收紧', () => {
 test('对局统计随模拟累加，重开后归零', () => {
   const s = quiet(playing());
   s.gold = 1000;
-  assert.equal(spawnPlayer(s, 'miner').ok, true);
-  assert.equal(spawnPlayer(s, 'sword').ok, true);
+  spawnUnit(s, 'miner', 0, null);
+  spawnUnit(s, 'sword', 0, null);
   assert.equal(s.stats.playerSpawned, 2);
   run(s, 30, 1 / 60);
   assert.ok(s.stats.trips >= 2, `实际运矿 ${s.stats.trips} 趟`);
   assert.equal(s.stats.aiSpawned, 0);
+  assert.ok(s.gold > 1000, '城堡被动收入也应计入');
   resetMatch(s);
   assert.equal(s.stats.trips, 0);
   assert.equal(s.stats.playerSpawned, 0);
+  assert.equal(s.stats.trained, 0);
+  assert.equal(s.training.length, 0);
 });
 
 test('六个矿点坐标由配置生成，两侧各三且渲染/逻辑共用', () => {
@@ -239,7 +244,7 @@ test('矿工只去自家半场的矿，多人会分散到不同矿点', () => {
   assert.ok(right.includes(chooseMineIndex(s, 1, 880)));
 
   s.gold = 1000;
-  for (let i = 0; i < 4; i++) spawnPlayer(s, 'miner');
+  for (let i = 0; i < 4; i++) spawnUnit(s, 'miner', 0, null);
   step(s, 1 / 60, createRng(9));
   const assigned = s.units.map((u) => u.mineIndex);
   assert.ok(assigned.every((i) => left.includes(i)), '我方矿工不得跨半场挖敌方矿');

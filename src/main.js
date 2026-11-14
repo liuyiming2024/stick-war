@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { createState, resetMatch } from './state.js';
 import { createRng } from './rng.js';
-import { step, minePositions } from './simulation.js';
+import { step, minePositions, setDifficulty } from './simulation.js';
 import { createAssets } from './assets.js';
 import { createRenderer } from './render.js';
 import { createUI } from './ui.js';
@@ -37,7 +37,8 @@ const driver = createFixedStepDriver(CONFIG.match.fixedStep, CONFIG.match.maxFra
 });
 
 const ui = createUI(state, {
-  start() {
+  start(difficulty) {
+    setDifficulty(state, difficulty);
     resetMatch(state);
     state.phase = 'playing';
     ui.showGame();

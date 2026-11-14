@@ -16,9 +16,10 @@ for (const key of sections) {
   if (!cfg[key]) throw new Error(`config/game.json 缺少段: ${key}`);
 }
 for (const [key, u] of Object.entries(cfg.units)) {
-  for (const field of ['name', 'cost', 'hp', 'speedPxPerSec', 'dmg', 'range', 'radius', 'kind']) {
+  for (const field of ['name', 'cost', 'hp', 'speedPxPerSec', 'dmg', 'range', 'radius', 'kind', 'trainSec']) {
     if (u[field] === undefined) throw new Error(`units.${key} 缺少字段: ${field}`);
   }
+  if (!(u.trainSec > 0)) throw new Error(`units.${key}.trainSec 必须为正`);
   if (u.projectile && !['arrow', 'rock', 'magic'].includes(u.projectile)) {
     throw new Error(`units.${key}.projectile 取值非法: ${u.projectile}`);
   }
@@ -40,6 +41,18 @@ if (!(cfg.layout.goldMineHeightRatio > 0 && cfg.layout.goldMineWidthRatio > 0)) 
 }
 if (!(cfg.assets.softTimeoutSec > 0 && cfg.assets.hardTimeoutSec > cfg.assets.softTimeoutSec)) {
   throw new Error('assets 软/硬超时配置不合理');
+}
+for (const key of ['normal', 'hard', 'insane']) {
+  const d = cfg.match.difficulties?.[key];
+  if (!d?.label || !(d.aiIncomeMul > 0) || !(d.aiSpawnMul > 0) || !(d.enemyStatueMul > 0)) {
+    throw new Error(`match.difficulties.${key} 配置不完整`);
+  }
+}
+for (const key of ['rangedVsGiant', 'rangedVsSpearton', 'rangedVsStatue', 'archerVsSwordwrath']) {
+  if (!(cfg.combat.damageMatrix?.[key] > 0)) throw new Error(`combat.damageMatrix.${key} 必须为正`);
+}
+if (!(cfg.economy.castleGoldPerSec > 0 && cfg.match.fortArcherPerUnits > 0)) {
+  throw new Error('城堡收入/射手配置不合理');
 }
 
 const header = [

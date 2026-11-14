@@ -23,6 +23,12 @@ for (const id of panels) {
 if (!html.includes('id="panelBackdrop"')) problems.push('缺少点击外部关闭的遮罩');
 if (!html.includes('id="pauseOverlay"')) problems.push('缺少暂停/结算浮层容器');
 if (!html.includes('rel="icon"')) problems.push('缺少内联 favicon（会触发 404）');
+for (const id of ['garrisonBtn', 'queueStrip', 'difficulty']) {
+  if (!html.includes(`id="${id}"`)) problems.push(`缺少 v2.2 控件 ${id}`);
+}
+const css = await readFile(path.join(root, 'styles', 'main.css'), 'utf8');
+if (!css.includes('#queueStrip')) problems.push('样式缺少训练队列条');
+if (!css.includes('#panelBackdrop')) problems.push('样式缺少遮罩');
 
 // 浮层 × 是运行时生成的，检查生成代码与分级 Esc 逻辑
 for (const needle of ['overlayClose', "k === 'Escape'", 'closePanels()', 'openPanel(', 'backdrop.addEventListener']) {
@@ -36,4 +42,4 @@ if (problems.length) {
   for (const p of problems) console.error('✗', p);
   process.exit(1);
 }
-console.log(`✓ 导航静态自检：${panels.length} 个面板 + 浮层 × + Esc 分级后退 + 遮罩，共 ${panels.length * 2 + 4} 个退出通道`);
+console.log(`✓ 导航静态自检：${panels.length} 个面板 + 浮层 × + Esc 分级后退 + 遮罩 + 训练队列/难度/驻堡控件`);

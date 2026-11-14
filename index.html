@@ -14,9 +14,12 @@
   <h1>火柴人战争</h1>
   <p class="sub" id="menuSub">兵种升级 · 图标商店 · 绿方阵营</p>
   <p class="load" id="loadTip">资源加载中...</p>
+  <label class="diffRow" for="difficulty">难度
+    <select id="difficulty" aria-label="选择难度"></select>
+  </label>
   <button class="menuBtn" id="startBtn" disabled>开始战斗</button>
   <button class="menuBtn ghost" id="helpBtn">玩法说明</button>
-  <p class="hint" id="menuHint">键盘 1–7 出兵 · A/D 切换攻守 · P 暂停 · Esc 后退</p>
+  <p class="hint" id="menuHint">键盘 1–7 出兵 · A/D/G 切攻守驻 · P 暂停 · Esc 后退</p>
 </div>
 
 <div id="gameUI" hidden>
@@ -33,9 +36,13 @@
   <div id="controlBtns">
     <button class="smallBtn attackBtn" id="attackBtn" aria-pressed="false">进攻</button>
     <button class="smallBtn defendBtn" id="defendBtn" aria-pressed="true">固守</button>
+    <button class="smallBtn fortBtn" id="garrisonBtn" aria-pressed="false">驻堡</button>
     <button class="smallBtn" id="pauseBtn" aria-pressed="false">暂停</button>
     <button class="smallBtn menuBtn2" id="menuBtn">菜单</button>
   </div>
+
+  <!-- 训练队列：点条目可取消并全额退款 -->
+  <div id="queueStrip" aria-label="训练队列"></div>
 
   <div id="bottomBar">
     <button class="toolBtn" id="shopBtn" aria-label="打开兵种商店">
@@ -54,14 +61,14 @@
 
   <section id="shopPanel" hidden aria-label="兵种商店">
     <button class="panelClose" id="closeShopX" type="button" aria-label="关闭兵种商店" title="关闭（Esc）">×</button>
-    <h2>兵种商店 <span class="panelHint">点击卡片直接出兵</span></h2>
+    <h2>兵种商店 <span class="panelHint">点击卡片下单训练</span></h2>
     <div class="shopGrid" id="shopGrid"></div>
     <button class="closeBtn" id="closeShop">关闭商店</button>
   </section>
 
   <section id="upgradePanel" hidden aria-label="兵种升级面板">
     <button class="panelClose" id="closeUpgradeX" type="button" aria-label="关闭兵种升级面板" title="关闭（Esc）">×</button>
-    <h2>兵种升级 <span class="panelHint">每级 80 金币，最高 8 级</span></h2>
+    <h2>兵种升级 <span class="panelHint">每级 80 金币 · 矿工为背包/镐/移速</span></h2>
     <div class="upgradeGrid" id="upgradeGrid"></div>
     <button class="closeBtn" id="closeUpgrade">关闭升级</button>
   </section>

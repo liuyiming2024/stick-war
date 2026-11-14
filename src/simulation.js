@@ -1,12 +1,14 @@
 // 纯逻辑层：完全不碰 DOM / canvas / window。
 // 所有时间量单位为秒，所有速度单位为 px/s；由 main.js 的固定步长驱动。
 import { CONFIG, UNIT_ORDER } from './config.js';
-import { countTeam, spawnUnit } from './state.js';
+import { countTeam, pendingTeam, spawnUnit } from './state.js';
 
 const C = CONFIG;
 
 const statueLeftLine = (s) => C.layout.statueInset + C.layout.statueHitRadius;
 const statueRightLine = (s) => s.w - C.layout.statueInset - C.layout.statueHitRadius;
+const fortX = () => C.layout.statueInset * C.layout.fortInsetRatio;
+const difficultyOf = (s) => C.match.difficulties[s.difficulty] ?? C.match.difficulties.normal;
 
 /** 所有矿点的实际像素坐标，供渲染层与逻辑层共用（唯一口径）。 */
 export function minePositions(state) {
@@ -46,8 +48,7 @@ function projectileY(state, u) {
   return state.h * C.layout.groundRatio - state.h * C.layout.unitHeightRatio * 0.62;
 }
 
-// snap=true 用于固定目标点（金矿 / 雕像 / 驻守线）：到达时吸附到精确坐标，
-// 避免不同 dt 下残留 0.x 像素的偏差在状态机里累积。
+// snap=true 用于固定目标点：到达时吸附到精确坐标，避免不同 dt 留下残差。
 function moveToward(u, tx, dt, eps = 2, snap = false) {
   const d = tx - u.x;
   if (Math.abs(d) <= eps) { if (snap) u.x = tx; return true; }
@@ -56,10 +57,24 @@ function moveToward(u, tx, dt, eps = 2, snap = false) {
   return false;
 }
 
-function applyDamage(target, dmg, events) {
-  target.hp -= dmg * target.defMul;
+/** 原版的克制关系：远程打巨人和雕像减伤、矛士盾挡箭、弓箭手克剑士。 */
+function damageMultiplier(attackerType, projectileKind, target) {
+  const m = C.combat.damageMatrix;
+  let mul = 1;
+  if (projectileKind) {
+    if (target.type === 'giant') mul *= m.rangedVsGiant;
+    if (target.type === 'spear') mul *= m.rangedVsSpearton;
+  }
+  if (attackerType === 'archer' && target.type === 'sword') mul *= m.archerVsSwordwrath;
+  return mul;
+}
+
+function applyDamage(target, dmg, events, attackerType = null, projectileKind = null) {
+  if (target.inFort) return;  // Garrison：堡内单位安全
+  const mul = damageMultiplier(attackerType, projectileKind, target);
+  target.hp -= dmg * mul * target.defMul;
   target.hitFlash = C.combat.hitFlashSec;
-  events.push({ type: 'hit', team: target.team });
+  events.push({ type: 'hit', team: target.team, mul });
 }
 
 function nearestEnemy(state, u) {
@@ -72,24 +87,32 @@ function nearestEnemy(state, u) {
   return best ? { unit: best, dist: minD } : null;
 }
 
+function makeProjectile(state, u, target, overrides = {}) {
+  return {
+    id: state.nextProjectileId++,
+    team: u.team,
+    kind: u.projectile ?? 'arrow',
+    x: u.x, y: projectileY(state, u),
+    tx: target.x, ty: projectileY(state, target),
+    targetId: target.id,
+    dmg: u.dmg,
+    speed: C.combat.projectileSpeedPxPerSec,
+    ttl: C.combat.projectileTtlSec,
+    age: 0,
+    dead: false,
+    attackerType: u.type,
+    projectileKind: u.projectile,
+    vsStatueMul: u.projectile ? C.combat.damageMatrix.rangedVsStatue : 1,
+    ...overrides,
+  };
+}
+
 function fire(state, u, target, events) {
   if (u.projectile) {
-    state.projectiles.push({
-      id: state.nextProjectileId++,
-      team: u.team,
-      kind: u.projectile,
-      x: u.x, y: projectileY(state, u),
-      tx: target.x, ty: projectileY(state, target),
-      targetId: target.id,
-      dmg: u.dmg,
-      speed: C.combat.projectileSpeedPxPerSec,
-      ttl: C.combat.projectileTtlSec,
-      age: 0,
-      dead: false,
-    });
+    state.projectiles.push(makeProjectile(state, u, target));
     events.push({ type: 'shoot', kind: u.projectile });
   } else {
-    applyDamage(target, u.dmg, events);
+    applyDamage(target, u.dmg, events, u.type, null);
   }
 }
 
@@ -109,9 +132,11 @@ function tickFighter(state, u, dt, events) {
   } else {
     const alreadyCrossed = u.team === 0 ? u.x >= line : u.x <= line;
     if (!alreadyCrossed) {
-      // 无目标：进攻推进到敌方雕像判定线，固守回到驻守线；敌方永远左推。
+      // 三条指令：Attack 推到敌方雕像 / Defend 守驻守线 / Garrison 撤回堡内
       const goal = u.team === 0
-        ? (state.gameMode === 'attack' ? statueRightLine(state) : state.w * C.layout.defendLineRatio)
+        ? (state.gameMode === 'attack' ? statueRightLine(state)
+           : state.gameMode === 'garrison' ? fortX()
+           : state.w * C.layout.defendLineRatio)
         : statueLeftLine(state);
       moveToward(u, goal, dt, 3, true);
     }
@@ -119,7 +144,8 @@ function tickFighter(state, u, dt, events) {
 
   const crossed = u.team === 0 ? u.x >= line : u.x <= line;
   if (crossed && !target && u.statueCd <= 0) {
-    const dmg = u.dmg * C.match.statueDamageMul;
+    const dmg = u.dmg * C.match.statueDamageMul *
+      (u.projectile ? C.combat.damageMatrix.rangedVsStatue : 1);
     if (u.team === 0) state.enemyHp -= dmg;
     else state.homeHp -= dmg;
     u.statueCd = C.match.statueAttackIntervalSec;
@@ -128,8 +154,7 @@ function tickFighter(state, u, dt, events) {
   }
 }
 
-// 阶段切换时把剩余 dt 结转给下一阶段：挖掘完成/交付发生在步中间时，
-// 剩下的时间仍然用于行走，因此 1/60 与 1/120 得到完全相同的轨迹与收益。
+// 阶段切换时结转剩余 dt：挖掘完成/交付落在步中间，剩下的时间继续用于行走。
 function tickMiner(state, u, dt, events) {
   const home = minerHomeX(state, u.team);
   let remaining = dt;
@@ -142,7 +167,7 @@ function tickMiner(state, u, dt, events) {
       if (t <= remaining + 1e-9) {
         u.x = target;
         u.job = 'mining';
-        u.mineTimer = C.economy.mineDurationSec;
+        u.mineTimer = u.mineDuration;
         remaining -= t;
       } else {
         u.x += Math.sign(target - u.x) * u.speed * remaining;
@@ -152,7 +177,7 @@ function tickMiner(state, u, dt, events) {
       if (u.mineTimer <= remaining + 1e-9) {
         remaining -= u.mineTimer;
         u.mineTimer = 0;
-        u.carry = C.economy.goldPerTrip;
+        u.carry = u.goldPerTrip;
         u.job = 'toHome';
       } else {
         u.mineTimer -= remaining;
@@ -182,7 +207,7 @@ function tickMiner(state, u, dt, events) {
 
 function tickProjectiles(state, dt, events) {
   for (const p of state.projectiles) {
-    const target = state.units.find((u) => u.id === p.targetId && u.hp > 0);
+    const target = state.units.find((u) => u.id === p.targetId && u.hp > 0 && !u.inFort);
     if (target) { p.tx = target.x; p.ty = projectileY(state, target); }
     const dx = p.tx - p.x, dy = p.ty - p.y;
     const dist = Math.hypot(dx, dy);
@@ -190,7 +215,7 @@ function tickProjectiles(state, dt, events) {
     p.age += dt;
     p.ttl -= dt;
     if (dist <= Math.max(travel, C.combat.projectileHitRadius)) {
-      if (target) applyDamage(target, p.dmg, events);
+      if (target) applyDamage(target, p.dmg, events, p.attackerType, p.projectileKind);
       p.dead = true;
     } else if (dist > 0) {
       p.x += (dx / dist) * travel;
@@ -199,6 +224,34 @@ function tickProjectiles(state, dt, events) {
     if (p.ttl <= 0) p.dead = true;
   }
   state.projectiles = state.projectiles.filter((p) => !p.dead);
+}
+
+// Garrison：每 3 个堡内单位折算 1 名城堡弓箭手，从雕像处放箭。
+function tickFortArrows(state, dt, events) {
+  if (state.gameMode !== 'garrison') return;
+  const fortCount = countTeam(state, 0);
+  if (fortCount <= 0) return;
+  const shots = Math.max(1, Math.floor(fortCount / C.match.fortArcherPerUnits));
+  state.fortArrowCd -= dt;
+  if (state.fortArrowCd > 0) return;
+  state.fortArrowCd += C.match.fortArcherIntervalSec / shots;
+
+  const originX = C.layout.statueInset;
+  const range = state.w * C.match.fortArcherRangeRatio;
+  const candidates = state.units.filter((u) =>
+    u.team === 1 && u.hp > 0 && Math.abs(u.x - originX) <= range);
+  if (!candidates.length) return;
+  const target = candidates.reduce((a, b) =>
+    Math.abs(a.x - originX) <= Math.abs(b.x - originX) ? a : b);
+  const shooter = {
+    team: 0, type: 'fort', projectile: 'arrow', dmg: C.match.fortArcherDamage,
+    x: originX, y: state.h * C.layout.groundRatio,
+  };
+  state.projectiles.push(makeProjectile(state, shooter, target, {
+    x: originX, y: state.h * C.layout.groundRatio - state.h * C.layout.unitHeightRatio,
+  }));
+  state.stats.fortArrows++;
+  events.push({ type: 'fortArrow', target: target.type });
 }
 
 // 同队轻推，避免 20 个单位叠在一个像素上。
@@ -222,53 +275,107 @@ function separate(units, dt) {
   }
 }
 
-function aiInterval(elapsed) {
+function aiInterval(elapsed, diff) {
   const { spawnIntervalSec: start, spawnIntervalMinSec: min, rampSec } = C.ai;
   const t = Math.min(1, elapsed / rampSec);
-  return start + (min - start) * t;
+  return (start + (min - start) * t) * diff.aiSpawnMul;
 }
 
-function tryAiSpawn(state, rng, events) {
+function enqueue(state, type, team, upgrades, events) {
+  const t = {
+    id: state.nextTrainingId++,
+    type, team,
+    due: state.elapsed + C.units[type].trainSec,
+    upgrades,
+  };
+  state.training.push(t);
+  events.push({ type: 'training', team, unit: type, id: t.id });
+  return t;
+}
+
+function tryAiSpawn(state, rng, events, diff) {
   const pool = UNIT_ORDER.filter((key) => {
     const u = C.units[key];
     return u.kind !== 'miner' && u.aiWeight > 0 &&
       (u.aiUnlockSec === null || state.elapsed >= u.aiUnlockSec);
   });
-  if (!pool.length || countTeam(state, 1) >= state.limits.aiPopMax) return;
+  if (!pool.length) return;
+  if (countTeam(state, 1) + pendingTeam(state, 1) >= state.limits.aiPopMax) return;
   const type = rng.pickWeighted(pool, (k) => C.units[k].aiWeight);
   if (state.aiGold < C.units[type].cost) return;
   state.aiGold -= C.units[type].cost;
-  spawnUnit(state, type, 1, null);
-  events.push({ type: 'spawn', team: 1, unit: type });
+  enqueue(state, type, 1, null, events);
+}
+
+function tickTraining(state, dt, events) {
+  if (!state.training.length) return [];
+  const fresh = [];
+  const done = [];
+  for (const t of state.training) {
+    // 容差 1e-6：elapsed 浮点累加误差约 1e-11，过窄会跨步漂移。
+    if (t.due <= state.elapsed + 1e-6) {
+      const u = spawnUnit(state, t.type, t.team, t.upgrades);
+      // 单位从 due 时刻起才存在，本步只能消费 (elapsed - due)，
+      // 否则 dt=1/60 会比 dt=1/120 多走一个步长，整局轨迹漂移。
+      fresh.push({ unit: u, available: Math.min(dt, Math.max(0, state.elapsed - t.due)) });
+      state.stats.trained++;
+      events.push({ type: 'trained', team: t.team, unit: t.type });
+      done.push(t.id);
+    }
+  }
+  if (done.length) {
+    const set = new Set(done);
+    state.training = state.training.filter((t) => !set.has(t.id));
+  }
+  return fresh;
 }
 
 /** 推进一个固定步长。返回本步事件，供 UI 层做提示。 */
 export function step(state, dt, rng) {
   const events = [];
   if (state.phase !== 'playing' || !(dt > 0)) return events;
+  const diff = difficultyOf(state);
 
   state.elapsed += dt;
-  state.aiGold += C.economy.aiGoldPerSec * dt;
+  // 原版：城堡每秒 1 金，矿工补齐其余；AI 额外收入受难度放大。
+  state.gold += C.economy.castleGoldPerSec * dt;
+  state.aiGold += (C.economy.castleGoldPerSec + C.economy.aiGoldPerSec) * diff.aiIncomeMul * dt;
+
   state.aiTimer -= dt;
   if (state.aiTimer <= 0) {
-    state.aiTimer += aiInterval(state.elapsed);
-    tryAiSpawn(state, rng, events);
+    state.aiTimer += aiInterval(state.elapsed, diff);
+    tryAiSpawn(state, rng, events, diff);
   }
+  const fresh = tickTraining(state, dt, events);
+  const freshTime = new Map(fresh.map((f) => [f.unit.id, f.available]));
 
+  const inGarrison = state.gameMode === 'garrison';
   for (const u of state.units) {
-    u.attackCd = Math.max(0, u.attackCd - dt);
-    u.statueCd = Math.max(0, u.statueCd - dt);
-    u.hitFlash = Math.max(0, u.hitFlash - dt);
-    u.atkAnim = Math.max(0, u.atkAnim - dt);
-    u.anim += dt;
+    const udt = freshTime.get(u.id) ?? dt;
+    u.attackCd = Math.max(0, u.attackCd - udt);
+    u.statueCd = Math.max(0, u.statueCd - udt);
+    u.hitFlash = Math.max(0, u.hitFlash - udt);
+    u.atkAnim = Math.max(0, u.atkAnim - udt);
+    u.anim += udt;
+    u.inFort = inGarrison && u.team === 0 &&
+      u.x <= fortX() + C.economy.mineArriveEps;
   }
 
   for (const u of state.units) {
     if (u.hp <= 0) continue;
-    if (u.kind === 'miner') tickMiner(state, u, dt, events);
-    else tickFighter(state, u, dt, events);
+    const udt = freshTime.get(u.id) ?? dt;
+    // 原版 Garrison：全军撤回堡内，不追击、不挖矿，输出交给城堡射手。
+    // 否则单位会因为 nearestEnemy 自己走出安全区，驻堡就失去意义。
+    if (state.gameMode === 'garrison' && u.team === 0) {
+      moveToward(u, fortX(), udt, 3, true);
+      u.inFort = u.x <= fortX() + C.economy.mineArriveEps;
+      continue;
+    }
+    if (u.kind === 'miner') tickMiner(state, u, udt, events);
+    else tickFighter(state, u, udt, events);
   }
 
+  tickFortArrows(state, dt, events);
   tickProjectiles(state, dt, events);
   separate(state.units, dt);
 
@@ -289,15 +396,32 @@ export function step(state, dt, rng) {
   return events;
 }
 
+/** 下单即扣钱、进入训练队列；训练完成才出场。升级在下单时快照。 */
 export function spawnPlayer(state, type) {
   if (state.phase !== 'playing') return { ok: false, reason: '未在对局中' };
   const cfg = C.units[type];
   if (!cfg) return { ok: false, reason: '未知兵种' };
   if (state.gold < cfg.cost) return { ok: false, reason: '金币不够' };
-  if (countTeam(state, 0) >= state.limits.popMax) return { ok: false, reason: '人口已满' };
+  if (countTeam(state, 0) + pendingTeam(state, 0) >= state.limits.popMax) {
+    return { ok: false, reason: '人口已满' };
+  }
   state.gold -= cfg.cost;
-  spawnUnit(state, type, 0, state.upgrades);
-  return { ok: true };
+  const snapshot = { ...state.upgrades[type] };
+  const t = enqueue(state, type, 0, snapshot, []);
+  return { ok: true, trainingId: t.id, trainSec: cfg.trainSec };
+}
+
+/** 原版：再点一次图标可取消训练并退款。 */
+export function cancelTraining(state, id) {
+  const idx = state.training.findIndex((t) => t.id === id);
+  if (idx < 0) return { ok: false, reason: '该训练已结束' };
+  const t = state.training[idx];
+  const refund = C.units[t.type].cost;
+  if (t.team === 0) state.gold += refund;
+  else state.aiGold += refund;
+  state.training.splice(idx, 1);
+  state.stats.cancelled++;
+  return { ok: true, refund, type: t.type };
 }
 
 export function doUpgrade(state, type, stat) {
@@ -312,7 +436,14 @@ export function doUpgrade(state, type, stat) {
 }
 
 export function setMode(state, mode) {
-  if (mode !== 'attack' && mode !== 'defend') return false;
+  if (!['attack', 'defend', 'garrison'].includes(mode)) return false;
   state.gameMode = mode;
+  if (mode !== 'garrison') state.fortArrowCd = 0;
+  return true;
+}
+
+export function setDifficulty(state, difficulty) {
+  if (!C.match.difficulties[difficulty]) return false;
+  state.difficulty = difficulty;
   return true;
 }

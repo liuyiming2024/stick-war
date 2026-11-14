@@ -207,6 +207,24 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
+  function drawFort(state) {
+    if (state.gameMode !== 'garrison') return;
+    const right = C.layout.statueInset * C.layout.fortInsetRatio + C.economy.mineArriveEps;
+    ctx.save();
+    ctx.fillStyle = P.fortTint;
+    ctx.fillRect(0, 0, right, state.h);
+    ctx.strokeStyle = 'rgba(150,200,255,.55)';
+    ctx.setLineDash([6, 6]);
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(right, 0); ctx.lineTo(right, state.h); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(220,235,255,.85)';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('驻堡', right / 2, state.h * 0.16);
+    ctx.restore();
+  }
+
   function drawMines(state) {
     const hgt = state.h * C.layout.goldMineHeightRatio;
     const y = state.h * C.layout.goldMineYRatio;
@@ -336,6 +354,7 @@ export function createRenderer(canvas) {
   function draw(state, assets) {
     ctx.clearRect(0, 0, state.w, state.h);
     drawBackground(state, assets);
+    drawFort(state);
     drawStatues(state, assets);
     drawMines(state);
     // 复制后再排序：渲染顺序不再改写物理数组。

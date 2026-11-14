@@ -3,8 +3,8 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.1.0",
-    "subtitle": "固定步长 · 双侧矿脉 · 矿工经济闭环"
+    "version": "2.2.0",
+    "subtitle": "训练队列 · 三指令 · 城堡射手 · 原版克制"
   },
   "layout": {
     "statueInset": 74,
@@ -42,6 +42,7 @@ export default Object.freeze({
     "goldMineWidthRatio": 1.25,
     "spawnInset": 120,
     "defendLineRatio": 0.3,
+    "fortInsetRatio": 0.6,
     "unitHeightRatio": 0.155,
     "giantHeightMul": 1.5,
     "minerHeightMul": 0.95,
@@ -55,14 +56,41 @@ export default Object.freeze({
     "fixedStep": 0.016666666666666666,
     "maxFrameDelta": 0.1,
     "statueDamageMul": 0.6,
-    "statueAttackIntervalSec": 1.2
+    "statueAttackIntervalSec": 1.2,
+    "fortArcherIntervalSec": 1.1,
+    "fortArcherDamage": 12,
+    "fortArcherRangeRatio": 0.62,
+    "fortArcherPerUnits": 3,
+    "difficulties": {
+      "normal": {
+        "label": "普通",
+        "aiIncomeMul": 1,
+        "aiSpawnMul": 1,
+        "enemyStatueMul": 1
+      },
+      "hard": {
+        "label": "困难",
+        "aiIncomeMul": 1.35,
+        "aiSpawnMul": 0.8,
+        "enemyStatueMul": 1.25
+      },
+      "insane": {
+        "label": "疯狂",
+        "aiIncomeMul": 1.7,
+        "aiSpawnMul": 0.6,
+        "enemyStatueMul": 1.5
+      }
+    }
   },
   "economy": {
     "goldPerTrip": 6,
     "mineDurationSec": 1.6,
     "mineArriveEps": 8,
     "aiStartGold": 60,
-    "aiGoldPerSec": 7
+    "aiGoldPerSec": 7,
+    "castleGoldPerSec": 1,
+    "bagPerLevel": 0.2,
+    "pickaxePerLevel": 0.2
   },
   "upgrade": {
     "cost": 80,
@@ -71,7 +99,8 @@ export default Object.freeze({
     "defReductionPerLevel": 0.12,
     "defFloor": 0.35,
     "cdReductionPerLevel": 0.1,
-    "cdFloor": 0.45
+    "cdFloor": 0.45,
+    "speedPerLevel": 0.1
   },
   "combat": {
     "separationPxPerSec": 30,
@@ -79,7 +108,13 @@ export default Object.freeze({
     "attackAnimSec": 0.23,
     "projectileSpeedPxPerSec": 420,
     "projectileHitRadius": 12,
-    "projectileTtlSec": 3
+    "projectileTtlSec": 3,
+    "damageMatrix": {
+      "rangedVsGiant": 0.5,
+      "rangedVsSpearton": 0.5,
+      "rangedVsStatue": 0.5,
+      "archerVsSwordwrath": 1.5
+    }
   },
   "ai": {
     "spawnIntervalSec": 3.2,
@@ -89,7 +124,7 @@ export default Object.freeze({
   "units": {
     "miner": {
       "name": "矿工",
-      "desc": "就近往返自家矿脉，每趟运回金币",
+      "desc": "就近往返自家矿脉，每趟运回金币；不能攻击",
       "cost": 25,
       "hp": 100,
       "speedPxPerSec": 66,
@@ -99,12 +134,13 @@ export default Object.freeze({
       "attackIntervalSec": 0,
       "kind": "miner",
       "projectile": null,
+      "trainSec": 4,
       "aiUnlockSec": null,
       "aiWeight": 0
     },
     "sword": {
       "name": "剑士",
-      "desc": "近战主力，便宜且成型快",
+      "desc": "最便宜、训练最快的前排，怕弓箭与矛士",
       "cost": 50,
       "hp": 200,
       "speedPxPerSec": 102,
@@ -114,12 +150,13 @@ export default Object.freeze({
       "attackIntervalSec": 1.17,
       "kind": "fighter",
       "projectile": null,
+      "trainSec": 3,
       "aiUnlockSec": 0,
       "aiWeight": 5
     },
     "spear": {
       "name": "矛士",
-      "desc": "血厚抗线，长兵器先手",
+      "desc": "厚血抗线，盾牌大幅削减远程伤害",
       "cost": 75,
       "hp": 280,
       "speedPxPerSec": 78,
@@ -129,12 +166,13 @@ export default Object.freeze({
       "attackIntervalSec": 1.33,
       "kind": "fighter",
       "projectile": null,
+      "trainSec": 10,
       "aiUnlockSec": 0,
       "aiWeight": 3
     },
     "archer": {
       "name": "弓箭手",
-      "desc": "远程射击，箭矢有飞行时间",
+      "desc": "远程射击；克剑士，但打不动巨人与雕像",
       "cost": 100,
       "hp": 140,
       "speedPxPerSec": 84,
@@ -144,6 +182,7 @@ export default Object.freeze({
       "attackIntervalSec": 1.5,
       "kind": "fighter",
       "projectile": "arrow",
+      "trainSec": 8,
       "aiUnlockSec": 0,
       "aiWeight": 3
     },
@@ -159,12 +198,13 @@ export default Object.freeze({
       "attackIntervalSec": 1.67,
       "kind": "fighter",
       "projectile": "rock",
+      "trainSec": 8,
       "aiUnlockSec": 20,
       "aiWeight": 1
     },
     "giant": {
       "name": "巨人",
-      "desc": "高攻高血，推进缓慢",
+      "desc": "专拆雕像，训练极慢；近战才能有效击杀",
       "cost": 175,
       "hp": 700,
       "speedPxPerSec": 39,
@@ -174,6 +214,7 @@ export default Object.freeze({
       "attackIntervalSec": 1.83,
       "kind": "fighter",
       "projectile": null,
+      "trainSec": 20,
       "aiUnlockSec": 30,
       "aiWeight": 1
     },
@@ -189,6 +230,7 @@ export default Object.freeze({
       "attackIntervalSec": 1.58,
       "kind": "fighter",
       "projectile": "magic",
+      "trainSec": 20,
       "aiUnlockSec": 45,
       "aiWeight": 1
     }
@@ -204,6 +246,7 @@ export default Object.freeze({
     "flashAlpha": 0.55,
     "backgroundTint": "rgba(120,180,80,.14)",
     "mineShadow": "rgba(40,30,12,.28)",
-    "mineGlow": "rgba(255,214,110,.35)"
+    "mineGlow": "rgba(255,214,110,.35)",
+    "fortTint": "rgba(90,160,255,.16)"
   }
 });
