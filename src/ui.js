@@ -1,4 +1,5 @@
-import { CONFIG, UNIT_ORDER, assetPath, upgradeStats } from './config.js';
+import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js';
+import { unitSVG, toolSVG } from './icons.js';
 import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js';
 import { spawnPlayer, doUpgrade, setMode, cancelTraining } from './simulation.js';
 
@@ -111,7 +112,7 @@ export function createUI(state, actions) {
       btn.className = 'unitIcon';
       btn.type = 'button';
       btn.title = `${cfg.name} · ${cfg.cost} 金币 · 快捷键 ${i + 1}`;
-      btn.innerHTML = `<img src="${assetPath(key)}" alt=""><span>${cfg.name}</span><span class="cost">${cfg.cost}</span>`;
+      btn.innerHTML = `${unitSVG(key)}<span>${cfg.name}</span><span class="cost">${cfg.cost}</span>`;
       btn.addEventListener('click', () => spawn(key));
       el.unitBar.appendChild(btn);
       unitButtons.set(key, btn);
@@ -124,7 +125,7 @@ export function createUI(state, actions) {
       const cfg = C.units[key];
       const card = document.createElement('div');
       card.className = 'shopItem';
-      card.innerHTML = `<img src="${assetPath(key)}" alt=""><div class="name">${cfg.name}</div>` +
+      card.innerHTML = `${unitSVG(key)}<div class="name">${cfg.name}</div>` +
         `<div class="price">${cfg.cost} 金币</div><div class="desc">${cfg.desc}</div>`;
       card.addEventListener('click', () => spawn(key));
       el.shopGrid.appendChild(card);
@@ -140,7 +141,7 @@ export function createUI(state, actions) {
       const card = document.createElement('div');
       card.className = 'upgradeItem';
       const levels = upgradeStats(key).map((s) => `${statName(s)} ${lv[s] ?? 0}`).join(' · ');
-      card.innerHTML = `<img src="${assetPath(key)}" alt=""><div class="name">${cfg.name}</div>` +
+      card.innerHTML = `${unitSVG(key)}<div class="name">${cfg.name}</div>` +
         `<div class="desc">${levels}</div>`;
       const row = document.createElement('div');
       row.className = 'upgradeRow';
@@ -159,6 +160,8 @@ export function createUI(state, actions) {
   }
 
   function sync() {
+    // CSS 动画与 Canvas 相位同步：非 playing 时全部暂停，画面完全静止。
+    document.body.dataset.phase = state.phase;
     const pop = countTeam(state, 0);
     setText(el.gold, 'gold', String(Math.round(state.gold)));
     setText(el.pop, 'pop', String(pop + pendingTeam(state, 0)));
@@ -268,7 +271,7 @@ export function createUI(state, actions) {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const k = e.key;
     if (state.phase === 'menu') {
-      if (k === 'Enter') { actions.start(); e.preventDefault(); }
+      if (k === 'Enter') { actions.start(el.difficulty.value); e.preventDefault(); }
       return;
     }
     if (k === 'Escape') {
@@ -292,6 +295,8 @@ export function createUI(state, actions) {
   }
 
   function bind() {
+    $('shopBtn').innerHTML = `${toolSVG('shop')}<span>商店</span>`;
+    $('upgradeBtn').innerHTML = `${toolSVG('upgrade')}<span>升级</span>`;
     for (const [key, d] of Object.entries(C.match.difficulties)) {
       const opt = document.createElement('option');
       opt.value = key;

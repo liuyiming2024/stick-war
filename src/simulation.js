@@ -148,6 +148,7 @@ function tickFighter(state, u, dt, events) {
       (u.projectile ? C.combat.damageMatrix.rangedVsStatue : 1);
     if (u.team === 0) state.enemyHp -= dmg;
     else state.homeHp -= dmg;
+    state.fx[u.team === 0 ? 'enemyShake' : 'homeShake'] = C.animation.statueShakeSec;
     u.statueCd = C.match.statueAttackIntervalSec;
     u.atkAnim = C.combat.attackAnimSec;
     events.push({ type: 'statueHit', team: u.team, dmg });
@@ -191,6 +192,7 @@ function tickMiner(state, u, dt, events) {
           if (u.team === 0) state.gold += u.carry;
           else state.aiGold += u.carry;
           state.stats.trips++;
+          state.fx.goldBurst = C.animation.goldBurstSec;
           events.push({ type: 'gold', amount: u.carry, team: u.team });
         }
         u.carry = 0;
@@ -337,6 +339,8 @@ export function step(state, dt, rng) {
   const diff = difficultyOf(state);
 
   state.elapsed += dt;
+  // 视觉反馈计时器按秒递减：暂停时 step 不跑，所有相位冻结。
+  for (const k of Object.keys(state.fx)) state.fx[k] = Math.max(0, state.fx[k] - dt);
   // 原版：城堡每秒 1 金，矿工补齐其余；AI 额外收入受难度放大。
   state.gold += C.economy.castleGoldPerSec * dt;
   state.aiGold += (C.economy.castleGoldPerSec + C.economy.aiGoldPerSec) * diff.aiIncomeMul * dt;
@@ -364,15 +368,20 @@ export function step(state, dt, rng) {
   for (const u of state.units) {
     if (u.hp <= 0) continue;
     const udt = freshTime.get(u.id) ?? dt;
+    const x0 = u.x;
     // 原版 Garrison：全军撤回堡内，不追击、不挖矿，输出交给城堡射手。
     // 否则单位会因为 nearestEnemy 自己走出安全区，驻堡就失去意义。
     if (state.gameMode === 'garrison' && u.team === 0) {
       moveToward(u, fortX(), udt, 3, true);
       u.inFort = u.x <= fortX() + C.economy.mineArriveEps;
-      continue;
+    } else if (u.kind === 'miner') {
+      tickMiner(state, u, udt, events);
+    } else {
+      tickFighter(state, u, udt, events);
     }
-    if (u.kind === 'miner') tickMiner(state, u, udt, events);
-    else tickFighter(state, u, udt, events);
+    // 步态相位只在真正移动时累加；静止单位只保留呼吸，不摆腿。
+    u.moving = Math.abs(u.x - x0) > 1e-9;
+    if (u.moving) u.walkPhase += udt * C.animation.walkHz * Math.PI * 2;
   }
 
   tickFortArrows(state, dt, events);

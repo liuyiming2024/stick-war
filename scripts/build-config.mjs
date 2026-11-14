@@ -11,7 +11,7 @@ const target = path.join(root, 'src', 'config.generated.js');
 
 const cfg = JSON.parse(await readFile(source, 'utf8'));
 
-const sections = ['meta', 'layout', 'match', 'economy', 'upgrade', 'combat', 'ai', 'units', 'assets', 'presentation'];
+const sections = ['meta', 'layout', 'match', 'economy', 'upgrade', 'combat', 'ai', 'units', 'animation', 'presentation'];
 for (const key of sections) {
   if (!cfg[key]) throw new Error(`config/game.json 缺少段: ${key}`);
 }
@@ -39,8 +39,25 @@ for (const side of [0, 1]) {
 if (!(cfg.layout.goldMineHeightRatio > 0 && cfg.layout.goldMineWidthRatio > 0)) {
   throw new Error('金矿形象尺寸比例必须为正');
 }
-if (!(cfg.assets.softTimeoutSec > 0 && cfg.assets.hardTimeoutSec > cfg.assets.softTimeoutSec)) {
-  throw new Error('assets 软/硬超时配置不合理');
+// v2.3：位图素材链退役，全部动画参数必须集中在 animation 段且为正。
+// 相位只允许取 state.elapsed / unit.walkPhase / projectile.age，禁止 performance.now()。
+const animRequired = [
+  'walkHz', 'walkLegSwing', 'walkArmSwing', 'breathHz', 'breathRatio', 'bobRatio',
+  'attackSwingRad', 'mineSwingHz', 'carryBobHz', 'carryBobRatio',
+  'cloudSpeedPxPerSec', 'cloudCount', 'grassSwayHz', 'grassCount',
+  'mineGlowHz', 'crystalTwinkleHz', 'statuePulseHz', 'statueShakePx',
+  'statueShakeSec', 'goldBurstSec', 'projectileSpinHz', 'fortPulseHz', 'trailDots',
+];
+for (const key of animRequired) {
+  if (!(cfg.animation?.[key] > 0)) throw new Error(`animation.${key} 必须为正数`);
+}
+const paletteRequired = [
+  'outline', 'skyTop', 'skyBottom', 'hillFar', 'hillNear', 'groundTop',
+  'groundBottom', 'grassBlade', 'stoneLight', 'stoneMid', 'stoneDark',
+  'weapon', 'weaponEdge', 'goldDark', 'goldLight', 'rockDark', 'rockLight',
+];
+for (const key of paletteRequired) {
+  if (!cfg.presentation?.[key]) throw new Error(`presentation.${key} 缺失（矢量调色板）`);
 }
 for (const key of ['normal', 'hard', 'insane']) {
   const d = cfg.match.difficulties?.[key];

@@ -53,10 +53,16 @@ test('双侧各有多个矿点，且都靠近自家阵地', () => {
   assert.deepEqual(xs, [...xs].sort((a, b) => a - b), '矿点应按 x 递增排列');
 });
 
-test('素材两段式超时与金矿形象比例可配置', () => {
-  assert.ok(raw.assets.hardTimeoutSec > raw.assets.softTimeoutSec);
+test('全矢量：无 assets 段，动画参数与矢量调色板齐备', () => {
+  assert.equal(raw.assets, undefined, 'v2.3 不应再有位图素材段');
+  assert.ok(raw.animation && Object.keys(raw.animation).length >= 20);
+  for (const [key, value] of Object.entries(raw.animation)) {
+    assert.ok(value > 0, `animation.${key} 必须为正`);
+  }
+  for (const key of ['outline', 'skyTop', 'hillFar', 'stoneLight', 'weapon', 'goldDark', 'rockDark']) {
+    assert.ok(raw.presentation[key], `presentation.${key} 缺失`);
+  }
   assert.ok(raw.layout.goldMineHeightRatio > 0);
   assert.ok(raw.layout.goldMineWidthRatio > 0);
-  assert.ok(raw.presentation.mineGlow && raw.presentation.mineShadow);
   assert.match(raw.meta.version, /^\d+\.\d+\.\d+$/);
 });

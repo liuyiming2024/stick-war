@@ -19,6 +19,8 @@ export function createState(w = 0, h = 0, difficulty = 'normal') {
     elapsed: 0,
     aiTimer: CONFIG.ai.spawnIntervalSec,
     fortArrowCd: 0,
+    // 视觉反馈由逻辑层按秒驱动（渲染层只读），保证暂停时画面完全静止。
+    fx: { homeShake: 0, enemyShake: 0, goldBurst: 0 },
     nextProjectileId: 1,
     nextId: 1,
     nextTrainingId: 1,
@@ -69,6 +71,8 @@ export function spawnUnit(state, type, team, upgrades = null) {
     hitFlash: 0,
     atkAnim: 0,
     anim: 0,
+    walkPhase: 0,
+    moving: false,
     inFort: false,
     // 矿工状态机
     job: 'toMine',

@@ -2,7 +2,7 @@
   "meta": {
     "title": "火柴人战争",
     "version": "2.3.0",
-    "subtitle": "训练队列 · 三指令 · 城堡射手 · 原版克制"
+    "subtitle": "全矢量渲染 · 统一线性风格 · 全要素动画"
   },
   "layout": {
     "statueInset": 74,
@@ -137,15 +137,56 @@
       "aiUnlockSec": 45, "aiWeight": 1
     }
   },
-  "assets": {
-    "softTimeoutSec": 6,
-    "hardTimeoutSec": 20
+  "animation": {
+    "walkHz": 1.8,
+    "walkLegSwing": 0.46,
+    "walkArmSwing": 0.34,
+    "breathHz": 0.55,
+    "breathRatio": 0.011,
+    "bobRatio": 0.014,
+    "attackSwingRad": 1.15,
+    "mineSwingHz": 2.4,
+    "carryBobHz": 2.6,
+    "carryBobRatio": 0.018,
+    "cloudSpeedPxPerSec": 12,
+    "cloudCount": 6,
+    "grassSwayHz": 0.9,
+    "grassCount": 34,
+    "mineGlowHz": 0.35,
+    "crystalTwinkleHz": 1.7,
+    "statuePulseHz": 0.5,
+    "statueShakePx": 4,
+    "statueShakeSec": 0.32,
+    "goldBurstSec": 0.7,
+    "projectileSpinHz": 3.2,
+    "fortPulseHz": 0.8,
+    "trailDots": 4
   },
   "presentation": {
     "playerColor": "#4dd35c",
     "enemyColor": "#ff4d4d",
     "goldColor": "#ffd24d",
     "flashAlpha": 0.55,
+    "outline": "#26301f",
+    "shadow": "rgba(30,40,25,.28)",
+    "skyTop": "#79b6e6",
+    "skyBottom": "#e2f2c6",
+    "sun": "#ffe9a8",
+    "cloud": "rgba(255,255,255,.82)",
+    "hillFar": "#7aa86c",
+    "hillNear": "#5d8a53",
+    "groundTop": "#8fc76a",
+    "groundBottom": "#66994a",
+    "grassBlade": "rgba(52,104,42,.62)",
+    "stoneLight": "#a8b0a6",
+    "stoneMid": "#7b857b",
+    "stoneDark": "#545c54",
+    "weapon": "#d9dee2",
+    "weaponEdge": "#f6faff",
+    "goldDark": "#d99a08",
+    "goldLight": "#ffe07a",
+    "rockDark": "#675d4b",
+    "rockLight": "#7b6f59",
     "backgroundTint": "rgba(120,180,80,.14)",
     "mineShadow": "rgba(40,30,12,.28)",
     "mineGlow": "rgba(255,214,110,.35)",
