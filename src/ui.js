@@ -1,5 +1,5 @@
 import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js';
-import { unitSVG, toolSVG } from './icons.js';
+import { unitIconHTML, toolSVG } from './icons.js';
 import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js';
 import { spawnPlayer, doUpgrade, setMode, cancelTraining } from './simulation.js';
 
@@ -112,7 +112,7 @@ export function createUI(state, actions) {
       btn.className = 'unitIcon';
       btn.type = 'button';
       btn.title = `${cfg.name} · ${cfg.cost} 金币 · 快捷键 ${i + 1}`;
-      btn.innerHTML = `${unitSVG(key)}<span>${cfg.name}</span><span class="cost">${cfg.cost}</span>`;
+      btn.innerHTML = `${unitIconHTML(key)}<span>${cfg.name}</span><span class="cost">${cfg.cost}</span>`;
       btn.addEventListener('click', () => spawn(key));
       el.unitBar.appendChild(btn);
       unitButtons.set(key, btn);
@@ -125,7 +125,7 @@ export function createUI(state, actions) {
       const cfg = C.units[key];
       const card = document.createElement('div');
       card.className = 'shopItem';
-      card.innerHTML = `${unitSVG(key)}<div class="name">${cfg.name}</div>` +
+      card.innerHTML = `${unitIconHTML(key)}<div class="name">${cfg.name}</div>` +
         `<div class="price">${cfg.cost} 金币</div><div class="desc">${cfg.desc}</div>`;
       card.addEventListener('click', () => spawn(key));
       el.shopGrid.appendChild(card);
@@ -141,7 +141,7 @@ export function createUI(state, actions) {
       const card = document.createElement('div');
       card.className = 'upgradeItem';
       const levels = upgradeStats(key).map((s) => `${statName(s)} ${lv[s] ?? 0}`).join(' · ');
-      card.innerHTML = `${unitSVG(key)}<div class="name">${cfg.name}</div>` +
+      card.innerHTML = `${unitIconHTML(key)}<div class="name">${cfg.name}</div>` +
         `<div class="desc">${levels}</div>`;
       const row = document.createElement('div');
       row.className = 'upgradeRow';

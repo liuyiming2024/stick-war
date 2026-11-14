@@ -2,6 +2,7 @@ import { CONFIG } from './config.js';
 import { createState, resetMatch } from './state.js';
 import { createRng } from './rng.js';
 import { step, minePositions, setDifficulty } from './simulation.js';
+import { createAssets } from './assets.js';
 import { createRenderer } from './render.js';
 import { createUI } from './ui.js';
 import { createFixedStepDriver } from './timing.js';
@@ -13,6 +14,18 @@ const renderer = createRenderer(canvas);
 
 let last = performance.now();
 let started = false;
+
+function refreshLoadTip() {
+  const n = assets.missingCount();
+  ui.setLoadTip(n ? `${n} 张素材缺失，已启用线稿替身` : '位图素材就绪，可以开战');
+}
+
+// 弱网下软超时先放行开战，图片晚到再补登记，不误判成「素材缺失」。
+const assets = createAssets({
+  softTimeoutMs: CONFIG.assets.softTimeoutSec * 1000,
+  hardTimeoutMs: CONFIG.assets.hardTimeoutSec * 1000,
+  onChange: () => { if (started) refreshLoadTip(); },
+});
 
 const driver = createFixedStepDriver(CONFIG.match.fixedStep, CONFIG.match.maxFrameDelta, (dt) => {
   if (state.phase !== 'playing') return;
@@ -54,7 +67,7 @@ function frame(now) {
   const real = Math.max(0, (now - last) / 1000);
   last = now;
   driver.advance(real);
-  renderer.draw(state);
+  renderer.draw(state, assets);
   ui.sync();
   requestAnimationFrame(frame);
 }
@@ -68,14 +81,17 @@ window.addEventListener('orientationchange', onResize);
 renderer.resize(state);
 requestAnimationFrame(frame);
 
-// 全矢量：没有图片要等、没有超时、没有降级替身，同步即可开战。
-ui.setLoadTip('全矢量渲染就绪，可以开战');
-ui.enableStart();
-started = true;
+assets.load((done, total) => {
+  ui.setLoadTip(`位图加载 ${done}/${total}`);
+}).then(() => {
+  refreshLoadTip();
+  ui.enableStart();
+  started = true;
+});
 
-// 供调试与自动化烟测：控制台可直接查看状态、矿点坐标与配置
+// 供调试与自动化烟测：控制台可直接查看状态、素材、矿点坐标与配置
 window.__stickWar = {
-  state, ui, renderer,
+  state, assets, ui, renderer,
   config: CONFIG,
   started: () => started,
   mines: () => minePositions(state),

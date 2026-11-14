@@ -29,7 +29,9 @@ button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 .unitIcon:hover,.toolBtn:hover{border-color:#e8c98a;box-shadow:0 0 0 1px rgba(232,201,138,.25) inset}
 .unitIcon:active,.toolBtn:active{transform:scale(.93)}
 .toolBtn{background:linear-gradient(180deg,#2d2a22,#1d1b17);border-color:#5b4c32;color:#e8c98a}
-.unitIcon svg{width:38px;height:38px}
+/* 位图立绘：白色火柴人放在深灰卡片上，加一层暗投影保证亮背景里也读得清 */
+.unitBmp{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55));animation:bmpBob 1.9s ease-in-out infinite}
+.unitIcon:hover .unitBmp,.shopItem:hover .unitBmp{animation-duration:.7s;transform:scale(1.06)}
 .toolBtn svg{width:30px;height:30px}
 .unitIcon .cost{color:#e8c98a;font-weight:600;font-size:10px;letter-spacing:.3px}
 .unitIcon:disabled,.toolBtn:disabled{filter:grayscale(1) brightness(.4);cursor:not-allowed}
@@ -62,7 +64,7 @@ button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 .shopGrid,.upgradeGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
 .shopItem,.upgradeItem{background:linear-gradient(180deg,#202a2d,#171f22);border:1px solid #36454a;border-radius:9px;padding:7px;color:#c6d2d4;text-align:center;transition:border-color .12s,transform .12s,box-shadow .12s}
 .shopItem{cursor:pointer}.shopItem:hover{border-color:#e8c98a;transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.35)}
-.shopItem svg,.upgradeItem svg{width:46px;height:46px;display:block;margin:0 auto 3px}
+.shopItem svg,.upgradeItem svg,.shopItem .unitBmp,.upgradeItem .unitBmp{width:46px;height:46px;object-fit:contain;display:block;margin:0 auto 3px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 .shopItem .name,.upgradeItem .name{font-size:13px;color:#e8c98a}
 .price{font-size:12px;color:#e8c98a;opacity:.9}
 .desc{font-size:10px;color:#809095;margin-top:3px;line-height:1.4;min-height:28px}
@@ -100,11 +102,13 @@ button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 .unitIcon:hover .vIcon .vArmR,.shopItem:hover .vIcon .vArmR{animation-duration:.45s}
 /* 暂停 / 菜单 / 结算时冻结所有 SVG 动画，与 Canvas 相位一致 */
 body:not([data-phase="playing"]) .vIcon,
-body:not([data-phase="playing"]) .vIcon *{animation-play-state:paused!important}
+body:not([data-phase="playing"]) .vIcon *,
+body:not([data-phase="playing"]) .unitBmp{animation-play-state:paused!important}
 body:not([data-phase="playing"]) .queueItem,
 body:not([data-phase="playing"]) .queueBar i,
 body:not([data-phase="playing"]) .smallBtn[aria-pressed="true"]{animation-play-state:paused!important}
 
+@keyframes bmpBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 @keyframes vBreathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-1.6px) scale(1.035)}}
 @keyframes vArmR{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(11deg)}}
 @keyframes vArmL{0%,100%{transform:rotate(6deg)}50%{transform:rotate(-11deg)}}

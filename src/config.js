@@ -3,7 +3,9 @@ import raw from './config.generated.js';
 export const CONFIG = raw;
 export const UNIT_ORDER = Object.keys(raw.units);
 export const DIFFICULTIES = Object.keys(raw.match.difficulties);
-// v2.3 起没有任何外部位图：兵种/雕像/背景/图标全部由 Canvas 路径与内联 SVG 生成。
+export const ASSET_KEYS = [...UNIT_ORDER, 'statue', 'battlefield'];
+
+export const assetPath = (key) => `./assets/${key}.webp`;
 
 /** 矿工按原版 Armory 只有「背包 / 镐 / 移速」三个维度，其他兵种是攻/防/速。 */
 export function upgradeStats(type) {

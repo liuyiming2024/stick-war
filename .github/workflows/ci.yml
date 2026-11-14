@@ -31,8 +31,8 @@ jobs:
       - name: 单元测试
         run: npm test
 
-      - name: 全矢量渲染静态自检（无位图 / 无墙钟相位）
-        run: node scripts/check-vector.mjs
+      - name: 位图素材清单 / WebP 头 / 渲染确定性校验
+        run: node scripts/check-assets.mjs
 
       - name: 页面退出通道静态自检
         run: node scripts/check-navigation.mjs
@@ -42,5 +42,6 @@ jobs:
           test -f index.html
           test -f .nojekyll
           test -f src/main.js
-          test ! -d assets
+          test -f assets/manifest.json
+          test "$(ls assets/*.webp | wc -l)" -eq 9
           grep -q 'type="module"' index.html

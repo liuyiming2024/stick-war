@@ -62,30 +62,32 @@ try {
   const resp = await page.goto(base, { waitUntil: 'networkidle', timeout: 30000 });
   check('首页可达', resp?.status() === 200, `HTTP ${resp?.status()}`);
 
-  // 全矢量：没有图片要等，同步就绪即可开战
+  // 位图回归：两段式超时放行后即可开战，9 张 WebP 必须全部取到
   await page.waitForFunction(() => !document.getElementById('startBtn').disabled, null, { timeout: 25000 });
-  check('矢量渲染就绪后开始按钮可用', true);
+  check('位图加载完成后开始按钮可用', true);
 
   const staticOk = failedRequests.length === 0;
-  check('所有静态资源（HTML/CSS/JS）无 4xx/5xx', staticOk, failedRequests.join(' | ') || '全部 200');
-  const bitmapRequests = allRequests.filter((u) => /\.(?:webp|png|jpe?g|gif|bmp|svg)(?:\?|$)/i.test(u));
-  check('零位图 / 零外部图标请求', bitmapRequests.length === 0, bitmapRequests.join(' | ') || '无');
+  check('所有静态资源（HTML/CSS/JS/WebP）无 4xx/5xx', staticOk, failedRequests.join(' | ') || '全部 200');
+  const webpUrls = new Set(allRequests.filter((u) => /\.webp(?:\?|$)/i.test(u)));
+  check('9 张 WebP 立绘/背景均已请求', webpUrls.size === 9, `${webpUrls.size} 个不同 URL`);
+  const missingAssets = await page.evaluate(() => window.__stickWar.assets.missingCount());
+  check('素材缺失数为 0（无隐形单位）', missingAssets === 0, `${missingAssets} 张缺失`);
   check('无运行时异常', consoleErrors.length === 0, consoleErrors.join(' | ') || '无');
 
   const mod = await page.evaluate(() => !!window.__stickWar);
   check('ESM 主模块装配成功', mod);
 
-  const imgCount = await page.locator('img').count();
-  check('页面无 <img> 位图元素', imgCount === 0, `${imgCount} 个`);
-  const svgCounts = await page.evaluate(() => ({
-    unit: document.querySelectorAll('#unitBar .vIcon').length,
-    shop: document.querySelectorAll('#shopGrid .vIcon').length,
-    upgrade: document.querySelectorAll('#upgradeGrid .vIcon').length,
+  const iconCounts = await page.evaluate(() => ({
+    unit: document.querySelectorAll('#unitBar .unitBmp').length,
+    shop: document.querySelectorAll('#shopGrid .unitBmp').length,
+    upgrade: document.querySelectorAll('#upgradeGrid .unitBmp').length,
     tools: document.querySelectorAll('.toolBtn .vIcon').length,
+    loaded: [...document.querySelectorAll('.unitBmp')].filter((i) => i.complete && i.naturalWidth > 0).length,
   }));
-  check('兵种栏/商店/升级/工具均为内联 SVG',
-    svgCounts.unit === 7 && svgCounts.shop === 7 && svgCounts.upgrade === 7 && svgCounts.tools === 2,
-    JSON.stringify(svgCounts));
+  check('兵种栏/商店/升级用位图立绘，工具按钮保留内联 SVG',
+    iconCounts.unit === 7 && iconCounts.shop === 7 && iconCounts.upgrade === 7 && iconCounts.tools === 2,
+    JSON.stringify(iconCounts));
+  check('所有位图图标已解码', iconCounts.loaded >= 21, `${iconCounts.loaded} 张`);
 
   const painted = await page.evaluate(() => {
     const c = document.getElementById('canvas');
@@ -94,7 +96,7 @@ try {
     for (let i = 3; i < d.length; i += 4) { if (d[i] > 0) { n++; if (n > 30) break; } }
     return n > 30;
   });
-  check('Canvas 全矢量绘制非空', painted);
+  check('Canvas 位图+矢量绘制非空', painted);
 
   const mineCount = await page.evaluate(() => window.__stickWar.mines().length);
   check('双侧矿脉已装配', mineCount === 6, `${mineCount} 个矿点`);
@@ -179,8 +181,8 @@ try {
   const p2 = await snap();
   check('暂停时 Canvas 画面完全静止', p1 === p2);
   const cssPaused = await page.evaluate(() =>
-    getComputedStyle(document.querySelector('#unitBar .vIcon')).animationPlayState);
-  check('暂停时 SVG 动画同步冻结', cssPaused === 'paused', cssPaused);
+    getComputedStyle(document.querySelector('#unitBar .unitBmp')).animationPlayState);
+  check('暂停时 CSS 动画同步冻结', cssPaused === 'paused', cssPaused);
 
   await page.click('.overlayClose');
   check('暂停 × 可恢复', !(await page.isVisible('#pauseOverlay')));

@@ -53,8 +53,8 @@ test('双侧各有多个矿点，且都靠近自家阵地', () => {
   assert.deepEqual(xs, [...xs].sort((a, b) => a - b), '矿点应按 x 递增排列');
 });
 
-test('全矢量：无 assets 段，动画参数与矢量调色板齐备', () => {
-  assert.equal(raw.assets, undefined, 'v2.3 不应再有位图素材段');
+test('位图素材两段式超时、动画参数与调色板齐备', () => {
+  assert.ok(raw.assets.hardTimeoutSec > raw.assets.softTimeoutSec, '软/硬超时须合理');
   assert.ok(raw.animation && Object.keys(raw.animation).length >= 20);
   for (const [key, value] of Object.entries(raw.animation)) {
     assert.ok(value > 0, `animation.${key} 必须为正`);

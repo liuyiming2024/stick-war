@@ -3,8 +3,8 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.4.0",
-    "subtitle": "全矢量 · 暗色剪影 · 动画重制"
+    "version": "2.5.0",
+    "subtitle": "位图立绘回归 · 矢量特效与动画"
   },
   "layout": {
     "statueInset": 74,
@@ -234,6 +234,10 @@ export default Object.freeze({
       "aiUnlockSec": 45,
       "aiWeight": 1
     }
+  },
+  "assets": {
+    "softTimeoutSec": 6,
+    "hardTimeoutSec": 20
   },
   "animation": {
     "walkHz": 1.8,

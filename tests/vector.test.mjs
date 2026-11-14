@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { CONFIG, UNIT_ORDER } from '../src/config.js';
-import { unitSVG, toolSVG, hasExternalResource } from '../src/icons.js';
+import { CONFIG, UNIT_ORDER, assetPath } from '../src/config.js';
+import { unitIconHTML, toolSVG, hasExternalResource } from '../src/icons.js';
 import { createState, spawnUnit } from '../src/state.js';
 import { createRng } from '../src/rng.js';
 import { step, setMode } from '../src/simulation.js';
@@ -20,13 +20,13 @@ const run = (s, seconds, seed = 7) => {
   for (let i = 0; i < Math.round(seconds / dt); i++) step(s, dt, rng);
 };
 
-test('每个兵种与工具按钮都生成自包含内联 SVG', () => {
+test('兵种图标引用位图立绘，工具按钮仍为自包含内联 SVG', () => {
   for (const key of UNIT_ORDER) {
-    const svg = unitSVG(key);
-    assert.ok(svg.startsWith('<svg'), `${key} 应为内联 SVG`);
-    assert.ok(svg.includes('class="vIcon"'), `${key} 缺少统一图标类`);
-    assert.ok(svg.includes('vArmR') && svg.includes('vLegL'), `${key} 缺少可动画骨架`);
-    assert.equal(hasExternalResource(svg), false, `${key} 的 SVG 不得引用外部资源`);
+    const html = unitIconHTML(key);
+    assert.ok(html.startsWith('<img'), `${key} 应为位图 <img>`);
+    assert.ok(html.includes('class="unitBmp"'), `${key} 缺少位图图标类`);
+    assert.ok(html.includes(assetPath(key)), `${key} 未指向对应 WebP`);
+    assert.ok(html.includes('.webp'), `${key} 应使用 WebP`);
   }
   for (const kind of ['shop', 'upgrade']) {
     const svg = toolSVG(kind);
@@ -35,11 +35,12 @@ test('每个兵种与工具按钮都生成自包含内联 SVG', () => {
   }
 });
 
-test('渲染层不使用墙钟时间、随机源或位图，相位只来自模拟状态', async () => {
+test('渲染层使用位图但仍禁止墙钟时间、随机源与滤镜，相位只来自模拟状态', async () => {
   const src = await readFile(new URL('../src/render.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('drawImage('), 'v2.5 应绘制位图立绘');
   for (const forbidden of [
     /performance\s*\.\s*now\s*\(/, /Date\s*\.\s*now\s*\(/,
-    /Math\s*\.\s*random\s*\(/, /ctx\s*\.\s*filter\b/, /drawImage\s*\(/,
+    /Math\s*\.\s*random\s*\(/, /ctx\s*\.\s*filter\b/,
   ]) {
     assert.equal(forbidden.test(src), false, `render.js 不应含 ${forbidden}`);
   }

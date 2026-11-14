@@ -11,7 +11,7 @@ const target = path.join(root, 'src', 'config.generated.js');
 
 const cfg = JSON.parse(await readFile(source, 'utf8'));
 
-const sections = ['meta', 'layout', 'match', 'economy', 'upgrade', 'combat', 'ai', 'units', 'animation', 'presentation'];
+const sections = ['meta', 'layout', 'match', 'economy', 'upgrade', 'combat', 'ai', 'units', 'assets', 'animation', 'presentation'];
 for (const key of sections) {
   if (!cfg[key]) throw new Error(`config/game.json 缺少段: ${key}`);
 }
@@ -70,6 +70,10 @@ for (const key of ['rangedVsGiant', 'rangedVsSpearton', 'rangedVsStatue', 'arche
 }
 if (!(cfg.economy.castleGoldPerSec > 0 && cfg.match.fortArcherPerUnits > 0)) {
   throw new Error('城堡收入/射手配置不合理');
+}
+// v2.5：位图立绘回归，两段式加载超时必须合理，弱网下先放行开战再补登记。
+if (!(cfg.assets?.softTimeoutSec > 0 && cfg.assets?.hardTimeoutSec > cfg.assets.softTimeoutSec)) {
+  throw new Error('assets 软/硬超时配置不合理');
 }
 
 const header = [
