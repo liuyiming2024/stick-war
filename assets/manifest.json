@@ -1,56 +1,48 @@
 {
+ "_note": "w/h 为画布像素尺寸，webp 为文件字节数；由 scripts/check-assets.mjs 逐项校验（含 WebP 头解析）",
  "miner": {
   "w": 182,
   "h": 200,
-  "png": 16158,
   "webp": 5996
  },
  "sword": {
   "w": 194,
   "h": 200,
-  "png": 16564,
   "webp": 6116
  },
  "spear": {
   "w": 192,
   "h": 200,
-  "png": 13896,
   "webp": 6640
  },
  "archer": {
   "w": 175,
   "h": 200,
-  "png": 20729,
   "webp": 7432
  },
  "stone": {
   "w": 176,
   "h": 200,
-  "png": 18537,
   "webp": 6156
  },
  "giant": {
   "w": 169,
   "h": 200,
-  "png": 27442,
   "webp": 8198
  },
  "wizard": {
   "w": 166,
   "h": 200,
-  "png": 20492,
   "webp": 8816
  },
  "statue": {
   "w": 191,
   "h": 320,
-  "png": 34405,
   "webp": 11138
  },
  "battlefield": {
   "w": 1600,
   "h": 800,
-  "jpg": 128376,
   "webp": 69324
  }
 }

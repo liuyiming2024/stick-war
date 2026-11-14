@@ -162,3 +162,60 @@ test('升级受单价与等级上限约束', () => {
   assert.equal(setMode(s, 'nonsense'), false);
   assert.equal(s.gameMode, 'attack');
 });
+
+test('远程兵发射真实投射物：飞行途中不扣血，命中后才结算', () => {
+  const s = quiet(playing());
+  const a = spawnUnit(s, 'archer', 0, null);
+  const e = spawnUnit(s, 'sword', 1, null);
+  a.x = 300; e.x = 380;
+  step(s, 1 / 60, createRng(11));
+  assert.equal(s.projectiles.length, 1, '应生成一枚箭矢');
+  assert.equal(e.hp, e.maxHp, '箭矢飞行途中不能提前扣血');
+  run(s, 0.5, 1 / 60, 11);
+  assert.ok(e.hp < e.maxHp, '命中后才扣血');
+  assert.equal(s.projectiles.length, 0, '命中后投射物被清理');
+});
+
+test('目标在飞行中死亡时投射物落空，不误伤旁边单位', () => {
+  const s = quiet(playing());
+  const a = spawnUnit(s, 'archer', 0, null);
+  const e1 = spawnUnit(s, 'sword', 1, null);
+  const e2 = spawnUnit(s, 'spear', 1, null);
+  a.x = 300; e1.x = 380; e2.x = 430;
+  step(s, 1 / 60, createRng(5));
+  assert.equal(s.projectiles.length, 1);
+  e1.hp = 0;
+  const hp2 = e2.hp;
+  run(s, 1.0, 1 / 60, 5);
+  assert.equal(s.projectiles.length, 0);
+  assert.equal(e2.hp, hp2, '死目标的箭不应转移给旁边的单位');
+});
+
+test('AI 兵种按解锁时间开放，出兵节奏随时间收紧', () => {
+  const s = playing();
+  s.aiGold = 1e6;
+  s.homeHp = 1e9;
+  s.limits.aiPopMax = 1000;
+  run(s, 10, 1 / 60, 3);
+  const early = s.units.filter((u) => u.team === 1).map((u) => u.type);
+  assert.ok(early.length >= 1, 'AI 应该出过兵');
+  assert.ok(early.every((t) => ['sword', 'spear', 'archer'].includes(t)),
+    `10 秒内不该出现未解锁兵种: ${early}`);
+  run(s, 50, 1 / 60, 3);
+  assert.ok(s.stats.aiSpawned >= 20,
+    `60 秒内出兵 ${s.stats.aiSpawned} 次，间隔应已从 3.2s 明显收紧`);
+});
+
+test('对局统计随模拟累加，重开后归零', () => {
+  const s = quiet(playing());
+  s.gold = 1000;
+  assert.equal(spawnPlayer(s, 'miner').ok, true);
+  assert.equal(spawnPlayer(s, 'sword').ok, true);
+  assert.equal(s.stats.playerSpawned, 2);
+  run(s, 30, 1 / 60);
+  assert.ok(s.stats.trips >= 2, `实际运矿 ${s.stats.trips} 趟`);
+  assert.equal(s.stats.aiSpawned, 0);
+  resetMatch(s);
+  assert.equal(s.stats.trips, 0);
+  assert.equal(s.stats.playerSpawned, 0);
+});

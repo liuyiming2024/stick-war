@@ -51,6 +51,8 @@ button:focus-visible{outline:2px solid #f4d16b;outline-offset:2px}
 #pauseOverlay{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:180;display:flex;align-items:center;justify-content:center}
 .pauseCard{background:#242424;color:#f4d16b;padding:22px 34px;border-radius:12px;font-size:24px;text-align:center;display:flex;flex-direction:column;gap:8px}
 .pauseCard small{color:#9a9a9a;font-size:12px}
+.resultStats{display:flex;flex-direction:column;gap:4px;color:#d8d8d8;font-size:12px;font-weight:normal;line-height:1.5;font-variant-numeric:tabular-nums}
+.resultStats div:first-child{color:#f4d16b}
 
 #toast{position:absolute;left:50%;top:58px;transform:translate(-50%,-12px);background:rgba(20,20,20,.92);color:#ffd24d;border:1px solid #6b5520;border-radius:20px;padding:8px 18px;font-size:13px;z-index:300;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}

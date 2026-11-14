@@ -2,8 +2,11 @@
 
 > 从「一个 18KB 的 index.html 包办一切」重构成模块化、可配置、可测试、可继续迭代的静态游戏。
 
+[![CI](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml/badge.svg)](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml)
+
 - 🎮 在线试玩：https://liuyiming2024.github.io/stick-war/
 - 📦 仓库：https://github.com/liuyiming2024/stick-war
+- 🧭 架构说明：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## 本地运行
 
@@ -35,9 +38,9 @@ python3 -m http.server 4173
 | 每帧 `ctx.filter` 闪白，移动端很贵 | 加载时预生成白色剪影贴图，运行时只 `drawImage` |
 | 素材缺失文案说「替代绘制」，实际直接隐形 | 真降级：火柴人线稿（头/四肢/武器按兵种区分）+ 纯色石像 |
 | 无超时、无重试、无脏检查 | 8s 加载超时；背景矩形缓存到 resize；UI 数值脏检查；支持 DPR |
-| README 体积口径不准、manifest 有幽灵字段 | `scripts/check-assets.mjs` 校验真实字节数：WebP 合计 **129816 字节 / 126.8 KiB / 9 个文件** |
+| README 体积口径不准、manifest 有 `png`/`jpg` 幽灵字段 | 清掉幽灵字段；`scripts/check-assets.mjs` 逐项校验字节数，并解析 WebP 头校验画布尺寸（9/9 通过）：合计 **129816 字节 / 126.8 KiB / 9 个文件** |
 | 全内联 onclick、字符串拼 handler | 统一 `addEventListener`，商店/兵种栏/升级面板都由配置自动生成 |
-| 无配置、无测试、无 CI | `config/game.json` 单一配置源 + 18 个单测 + GitHub Actions |
+| 无配置、无测试、无 CI | `config/game.json` 单一配置源 + 22 个单测 + GitHub Actions |
 
 ## 目录结构
 
@@ -56,8 +59,9 @@ src/assets.js                 素材加载、闪白贴图、超时降级
 src/render.js                 Canvas 绘制与线稿替身
 src/ui.js                     DOM 绑定、面板、快捷键
 src/main.js                   装配与主循环
-scripts/                      配置生成 / 静态服务 / 素材校验
-tests/                         node:test，18 个用例
+scripts/                      配置生成 / 静态服务 / 素材校验（含 WebP 头解析）
+docs/ARCHITECTURE.md          分层、状态机、时间约定与扩展点
+tests/                         node:test，22 个用例
 .github/workflows/ci.yml       CI
 ```
 
@@ -68,7 +72,7 @@ tests/                         node:test，18 个用例
 ```bash
 vim config/game.json       # 改兵种、经济、AI、升级、布局
 npm run build              # 重新生成 src/config.generated.js
-npm run check              # 生成 + 18 个测试 + 素材校验
+npm run check              # 生成 + 22 个测试 + 素材字节/尺寸校验
 git add config/game.json src/config.generated.js
 ```
 
@@ -83,6 +87,10 @@ git add config/game.json src/config.generated.js
 | 暂停 / 继续 | `P` |
 | 关闭面板 | `Esc` |
 | 开始对局 | `Enter` |
+
+## 结算统计
+
+对局结束的浮层会给出用时、我方出兵数、运矿趟数、敌方出兵数，全部来自 `state.stats`（纯逻辑层累加，重开归零）。想加别的指标，在 `simulation.js` 里累加、在 `ui.js` 的 `showEnd()` 里读即可，不用碰渲染。
 
 ## GitHub Pages
 

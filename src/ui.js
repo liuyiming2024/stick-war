@@ -159,16 +159,27 @@ export function createUI(state, actions) {
     sync();
   }
 
-  function showOverlay(title, sub, handler) {
+  function showOverlay(title, sub, handler, details = []) {
     el.overlay.hidden = false;
     el.overlay.innerHTML = '';
     const card = document.createElement('div');
     card.className = 'pauseCard';
     const t = document.createElement('span');
     t.textContent = title;
+    card.appendChild(t);
+    if (details.length) {
+      const box = document.createElement('div');
+      box.className = 'resultStats';
+      for (const line of details) {
+        const row = document.createElement('div');
+        row.textContent = line;
+        box.appendChild(row);
+      }
+      card.appendChild(box);
+    }
     const s = document.createElement('small');
     s.textContent = sub;
-    card.append(t, s);
+    card.appendChild(s);
     el.overlay.appendChild(card);
     overlayHandler = handler;
   }
@@ -182,7 +193,18 @@ export function createUI(state, actions) {
   function showEnd(result) {
     const won = result === 'won';
     toast(won ? '敌方雕像被摧毁，胜利！' : '我方雕像被摧毁，失败');
-    showOverlay(won ? '胜利' : '失败', '点击返回主菜单，再来一局', () => actions.goMenu());
+    const total = Math.floor(state.elapsed);
+    const clock = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+    showOverlay(
+      won ? '胜利' : '失败',
+      '点击返回主菜单，再来一局',
+      () => actions.goMenu(),
+      [
+        `用时 ${clock}`,
+        `我方出兵 ${state.stats.playerSpawned} · 运矿 ${state.stats.trips} 趟`,
+        `敌方出兵 ${state.stats.aiSpawned}`,
+      ],
+    );
   }
 
   function handleKey(e) {
