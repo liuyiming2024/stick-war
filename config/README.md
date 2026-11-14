@@ -4,8 +4,8 @@
 
 ```bash
 npm run build     # 重新生成 src/config.generated.js + 结构校验
-npm run check     # 生成 + 46 个单测 + 素材/渲染确定性静态自检
-npm run smoke     # 可选：49 项页面可达性断言
+npm run check     # 生成 + 57 个单测 + 素材/渲染确定性静态自检
+npm run smoke     # 可选：56 项页面可达性断言
 ```
 
 `src/config.generated.js` 必须一起提交（Pages 从 `main` 直出，运行时不跑构建）。CI 用 `git diff --exit-code` 校验漂移。
@@ -22,7 +22,7 @@ npm run smoke     # 可选：49 项页面可达性断言
 | `economy` | 矿工每趟收益、挖掘耗时、AI 收入、`castleGoldPerSec` 被动收入、`bagPerLevel` / `pickaxePerLevel` |
 | `upgrade` | 升级单价、等级上限、攻/防/速每级增益、`speedPerLevel` 移速增益与下限 |
 | `combat` | 推挤、受击闪白、投射物参数、`damageMatrix` 克制倍率 |
-| `ai` | 出兵间隔、随时间收紧的节奏 |
+| `ai` | v2.7 发育决策：`decisionIntervalSec` 决策 tick、`rampSec` 矿工目标爬坡、`minerTargetStart/End` 与三个 `ReserveGold` 预算、`upgradeIntervalSec` 科技节流、`upgradePlan` 升级序列（先矿工经济再兵种攻防） |
 | `units` | 7 个兵种全部数值；`trainSec`、`aiUnlockSec`、`aiWeight`、`projectile`、`kind` |
 | `assets` | 位图加载 `softTimeoutSec` / `hardTimeoutSec`，弱网软超时先放行开战、硬超时才记缺失 |
 | `animation` | 全部动画参数：步态/呼吸/挥击/挖掘/背矿/晶簇/雕像/拖尾等，见下 |
@@ -81,7 +81,9 @@ npm run smoke     # 可选：49 项页面可达性断言
 - `trainSec` 下单即扣钱入队，升级在下单时快照，点队列条目全额退款
 - `attack` / `defend` / `garrison` 三指令；驻堡全军回 `fortX()` 并免疫伤害，输出交给城堡射手
 - `damageMatrix` 四倍率：弓克剑、投射物打矛士/巨人减半、远程拆雕像减伤
-- `difficulties` 三档：`aiIncomeMul` / `aiSpawnMul` / `enemyStatueMul`，重开保留难度
+- `difficulties` 三档：`aiIncomeMul` 放大**矿工每趟交付收益**、`aiSpawnMul` 缩放**训练时长**、`enemyStatueMul` 加敌方雕像血量；三者都不再改「出兵间隔」，重开保留难度
+- `economy.aiGoldPerSec=1.5` 已低于一趟矿的 `goldPerTrip=6`：AI 的钱主要来自自己训练的矿工真实往返，`state.aiUpgrades` 是与玩家 `state.upgrades` 完全隔离的独立 Armory
+- `aiGrowthInfo(state)` 是顶栏、结算与烟测共用的敌方发育快照口径
 
 ## 矿点
 

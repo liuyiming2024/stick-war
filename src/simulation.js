@@ -156,7 +156,7 @@ function tickFighter(state, u, dt, events) {
 }
 
 // 阶段切换时结转剩余 dt：挖掘完成/交付落在步中间，剩下的时间继续用于行走。
-function tickMiner(state, u, dt, events) {
+function tickMiner(state, u, dt, events, diff) {
   const home = minerHomeX(state, u.team);
   let remaining = dt;
   let guard = 0;
@@ -189,9 +189,15 @@ function tickMiner(state, u, dt, events) {
       if (t <= remaining + 1e-9) {
         u.x = home;
         if (u.carry > 0) {
-          if (u.team === 0) state.gold += u.carry;
-          else state.aiGold += u.carry;
-          state.stats.trips++;
+          if (u.team === 0) {
+            state.gold += u.carry;
+            state.stats.trips++;
+          } else {
+            const earned = u.carry * diff.aiIncomeMul;
+            state.aiGold += earned;
+            state.stats.aiTrips++;
+            state.stats.aiGoldEarned += earned;
+          }
           state.fx.goldBurst = C.animation.goldBurstSec;
           events.push({ type: 'gold', amount: u.carry, team: u.team });
         }
@@ -277,17 +283,11 @@ function separate(units, dt) {
   }
 }
 
-function aiInterval(elapsed, diff) {
-  const { spawnIntervalSec: start, spawnIntervalMinSec: min, rampSec } = C.ai;
-  const t = Math.min(1, elapsed / rampSec);
-  return (start + (min - start) * t) * diff.aiSpawnMul;
-}
-
-function enqueue(state, type, team, upgrades, events) {
+function enqueue(state, type, team, upgrades, events, trainSec = C.units[type].trainSec) {
   const t = {
     id: state.nextTrainingId++,
     type, team,
-    due: state.elapsed + C.units[type].trainSec,
+    due: state.elapsed + trainSec,
     upgrades,
   };
   state.training.push(t);
@@ -295,18 +295,99 @@ function enqueue(state, type, team, upgrades, events) {
   return t;
 }
 
-function tryAiSpawn(state, rng, events, diff) {
+// ── v2.7：敌方发育 ──────────────────────────────────────────────────────
+// 旧实现是「每 aiInterval 秒凭空扣金币造一个兵」，收入几乎全来自 aiGoldPerSec
+// 被动加成，AI 从不造矿工、从不升级——观感就是哐哐派兵。
+// 现在 AI 与玩家共用同一套经济：真实矿工跑 minePositions→交付→aiGold，
+// 独立 Armory 按 upgradePlan 花钱升级，出兵走训练队列且受人口/预算约束。
+// 每个决策 tick 只执行一个动作，优先级 补矿工 → 升科技 → 出兵。
+function aiMinerTarget(state) {
+  const g = C.ai;
+  const t = Math.min(1, state.elapsed / g.rampSec);
+  return Math.round(g.minerTargetStart + (g.minerTargetEnd - g.minerTargetStart) * t);
+}
+
+function aiMinerCount(state) {
+  let n = 0;
+  for (const u of state.units) {
+    if (u.team === 1 && u.kind === 'miner' && u.hp > 0) n++;
+  }
+  for (const t of state.training) {
+    if (t.team === 1 && C.units[t.type].kind === 'miner') n++;
+  }
+  return n;
+}
+
+function aiPopulation(state) {
+  return countTeam(state, 1) + pendingTeam(state, 1);
+}
+
+/** 下单统一入口：真扣钱、按难度缩放训练时长、快照 AI 自己的 Armory。 */
+function aiEnqueue(state, type, diff, events) {
+  const cfg = C.units[type];
+  state.aiGold -= cfg.cost;
+  // bonusFor 期望 { [type]: levels } 结构，不能只传单层 level 对象。
+  const snapshot = { [type]: { ...state.aiUpgrades[type] } };
+  const t = enqueue(state, type, 1, snapshot, events, cfg.trainSec * diff.aiSpawnMul);
+  if (cfg.kind === 'miner') state.stats.aiMinersTrained++;
+  return t;
+}
+
+function tryAiUpgrade(state, events) {
+  const g = C.ai;
+  if (state.aiUpgradeTimer > 0 || state.aiPlanIndex >= g.upgradePlan.length) return false;
+  const [type, stat] = g.upgradePlan[state.aiPlanIndex];
+  const lv = state.aiUpgrades[type];
+  if (!lv || !(stat in lv) || lv[stat] >= C.upgrade.maxLevel) {
+    state.aiPlanIndex++;  // 配置写错/满级时跳过，不卡死整条科技线
+    return false;
+  }
+  if (state.aiGold < C.upgrade.cost + g.upgradeReserveGold) return false;
+  state.aiGold -= C.upgrade.cost;
+  lv[stat]++;
+  state.aiPlanIndex++;
+  state.aiUpgradeTimer = g.upgradeIntervalSec;
+  state.stats.aiUpgrades++;
+  events.push({ type: 'aiUpgrade', unit: type, stat, level: lv[stat] });
+  return true;
+}
+
+/** 敌方发育快照：UI 顶栏、结算统计与自动化断言共用这一个口径。 */
+export function aiGrowthInfo(state) {
+  return {
+    miners: aiMinerCount(state),
+    target: aiMinerTarget(state),
+    upgrades: state.stats.aiUpgrades,
+    gold: state.aiGold,
+    trips: state.stats.aiTrips,
+    earned: state.stats.aiGoldEarned,
+    planIndex: state.aiPlanIndex,
+    minersTrained: state.stats.aiMinersTrained,
+  };
+}
+
+function aiDecide(state, rng, events, diff) {
+  const g = C.ai;
+  if (aiPopulation(state) >= state.limits.aiPopMax) return;
+
+  // 1) 补矿工：留一笔恢复经济的钱，矿工被打掉后会自动补回来。
+  if (aiMinerCount(state) < aiMinerTarget(state) &&
+      state.aiGold >= C.units.miner.cost + g.minerReserveGold) {
+    aiEnqueue(state, 'miner', diff, events);
+    return;
+  }
+  // 2) 科技：按 upgradePlan 顺序买，节流由 aiUpgradeTimer 控制。
+  if (tryAiUpgrade(state, events)) return;
+  // 3) 军事：矿工达标后才动用预算，仍留足补矿工的钱。
   const pool = UNIT_ORDER.filter((key) => {
     const u = C.units[key];
     return u.kind !== 'miner' && u.aiWeight > 0 &&
       (u.aiUnlockSec === null || state.elapsed >= u.aiUnlockSec);
   });
   if (!pool.length) return;
-  if (countTeam(state, 1) + pendingTeam(state, 1) >= state.limits.aiPopMax) return;
   const type = rng.pickWeighted(pool, (k) => C.units[k].aiWeight);
-  if (state.aiGold < C.units[type].cost) return;
-  state.aiGold -= C.units[type].cost;
-  enqueue(state, type, 1, null, events);
+  if (state.aiGold < C.units[type].cost + g.militaryReserveGold) return;
+  aiEnqueue(state, type, diff, events);
 }
 
 function tickTraining(state, dt, events) {
@@ -341,14 +422,17 @@ export function step(state, dt, rng) {
   state.elapsed += dt;
   // 视觉反馈计时器按秒递减：暂停时 step 不跑，所有相位冻结。
   for (const k of Object.keys(state.fx)) state.fx[k] = Math.max(0, state.fx[k] - dt);
-  // 原版：城堡每秒 1 金，矿工补齐其余；AI 额外收入受难度放大。
+  // 原版：城堡每秒 1 金，矿工补齐其余。v2.7 把 aiGoldPerSec 从 7 降到 1.5，
+  // AI 的主要收入改成自己训练的矿工真实往返交付；难度只放大矿工收益。
   state.gold += C.economy.castleGoldPerSec * dt;
   state.aiGold += (C.economy.castleGoldPerSec + C.economy.aiGoldPerSec) * diff.aiIncomeMul * dt;
 
-  state.aiTimer -= dt;
-  if (state.aiTimer <= 0) {
-    state.aiTimer += aiInterval(state.elapsed, diff);
-    tryAiSpawn(state, rng, events, diff);
+  // 决策 tick：一次只做一个动作（补矿工 / 升科技 / 出兵），不再按周期硬刷兵。
+  state.aiUpgradeTimer = Math.max(0, state.aiUpgradeTimer - dt);
+  state.aiDecisionTimer -= dt;
+  if (state.aiDecisionTimer <= 0) {
+    state.aiDecisionTimer += C.ai.decisionIntervalSec;
+    aiDecide(state, rng, events, diff);
   }
   const fresh = tickTraining(state, dt, events);
   const freshTime = new Map(fresh.map((f) => [f.unit.id, f.available]));
@@ -375,7 +459,7 @@ export function step(state, dt, rng) {
       moveToward(u, fortX(), udt, 3, true);
       u.inFort = u.x <= fortX() + C.economy.mineArriveEps;
     } else if (u.kind === 'miner') {
-      tickMiner(state, u, udt, events);
+      tickMiner(state, u, udt, events, diff);
     } else {
       tickFighter(state, u, udt, events);
     }
@@ -415,7 +499,9 @@ export function spawnPlayer(state, type) {
     return { ok: false, reason: '人口已满' };
   }
   state.gold -= cfg.cost;
-  const snapshot = { ...state.upgrades[type] };
+  // bonusFor 取 upgrades[type]，必须是 { [type]: levels }；只传单层 level 对象
+  // 会让升级静默失效（旧实现的 bug），AI 侧 aiEnqueue 同样按这个结构快照。
+  const snapshot = { [type]: { ...state.upgrades[type] } };
   const t = enqueue(state, type, 0, snapshot, []);
   return { ok: true, trainingId: t.id, trainSec: cfg.trainSec };
 }

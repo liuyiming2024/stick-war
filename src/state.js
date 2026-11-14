@@ -14,10 +14,14 @@ export function createState(w = 0, h = 0, difficulty = 'normal') {
     units: [],
     projectiles: [],
     training: [],               // 原版：单位需要训练时间，不是点下就出场
-    upgrades: freshUpgrades(),
+    upgrades: freshUpgrades(),   // 玩家 Armory
+    aiUpgrades: freshUpgrades(), // v2.7：敌方独立 Armory，AI 自己花钱升
     gameMode: 'defend',         // attack | defend | garrison
     elapsed: 0,
-    aiTimer: CONFIG.ai.spawnIntervalSec,
+    // v2.7：AI 不再按出兵周期哐哐刷兵，而是按决策 tick 依次补矿工 → 升科技 → 出兵。
+    aiDecisionTimer: CONFIG.ai.decisionIntervalSec,
+    aiUpgradeTimer: CONFIG.ai.upgradeIntervalSec,
+    aiPlanIndex: 0,
     fortArrowCd: 0,
     // 视觉反馈由逻辑层按秒驱动（渲染层只读），保证暂停时画面完全静止。
     fx: { homeShake: 0, enemyShake: 0, goldBurst: 0 },
@@ -25,7 +29,11 @@ export function createState(w = 0, h = 0, difficulty = 'normal') {
     nextId: 1,
     nextTrainingId: 1,
     limits: { popMax: CONFIG.match.popMax, aiPopMax: CONFIG.match.aiPopMax },
-    stats: { trips: 0, aiSpawned: 0, playerSpawned: 0, trained: 0, cancelled: 0, fortArrows: 0 },
+    stats: {
+      trips: 0, aiTrips: 0, aiSpawned: 0, playerSpawned: 0,
+      trained: 0, cancelled: 0, fortArrows: 0,
+      aiMinersTrained: 0, aiUpgrades: 0, aiGoldEarned: 0,
+    },
   };
 }
 

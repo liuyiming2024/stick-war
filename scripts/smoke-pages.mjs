@@ -115,7 +115,8 @@ try {
   const goldAfterOrder = await page.evaluate(() => window.__stickWar.state.gold);
   check('下单即扣除金币', Math.abs(goldAfterOrder - (goldBefore - 100)) < 2,
     `${goldBefore} → ${goldAfterOrder}`);
-  check('训练中单位未出场', (await page.evaluate(() => window.__stickWar.state.units.length)) === 0);
+  check('训练中我方单位未出场', (await page.evaluate(() =>
+    window.__stickWar.state.units.filter((u) => u.team === 0).length)) === 0);
   await page.click('#queueStrip .queueItem');
   check('取消训练后队列清空', (await page.locator('#queueStrip .queueItem').count()) === 0);
   const goldAfterCancel = await page.evaluate(() => window.__stickWar.state.gold);
@@ -128,6 +129,37 @@ try {
   check('驻堡按钮有选中态', (await page.getAttribute('#garrisonBtn', 'aria-pressed')) === 'true');
   await page.click('#defendBtn');
   check('可切回固守', (await page.evaluate(() => window.__stickWar.state.gameMode)) === 'defend');
+
+  // v2.7 敌方发育：开局先造矿工 → 真实往返运矿 → 自己花钱升科技，不是按周期刷兵
+  // 等待期间 AI 会持续推线，先把雕像血量顶住，避免对局自动结束打断后续可达性断言。
+  await page.evaluate(() => { window.__stickWar.state.homeHp = 1e9; });
+  await page.waitForFunction(() => window.__stickWar.growth().trips > 0, null, { timeout: 30000 });
+  const dev = await page.evaluate(() => {
+    const w = window.__stickWar;
+    return {
+      ...w.growth(),
+      enemyMiners: w.state.units.filter((u) => u.team === 1 && u.kind === 'miner' && u.hp > 0).length,
+      onOwnHalf: w.state.units.filter((u) => u.team === 1 && u.kind === 'miner' && u.hp > 0)
+        .every((u) => u.x > w.state.w * 0.5),
+      playerUpgradesClean: Object.values(w.state.upgrades)
+        .every((lv) => Object.values(lv).every((v) => v === 0)),
+      aiDevText: document.getElementById('aiDev').textContent,
+    };
+  });
+  check('敌方矿工补到目标数（含训练中）', dev.miners >= dev.target,
+    `${dev.miners}/${dev.target}，其中已出场 ${dev.enemyMiners} 名`);
+  check('敌方矿工确实已出场', dev.enemyMiners >= 2, `${dev.enemyMiners} 名`);
+  check('敌方矿工只在自家半场挖矿', dev.onOwnHalf);
+  check('敌方矿工真实交付产生收入', dev.trips > 0 && dev.earned > 0,
+    `${dev.trips} 趟 / ${Math.round(dev.earned)} 金`);
+  check('顶栏展示敌方发育指标', dev.aiDevText.includes('矿工') && dev.aiDevText.includes('科技'),
+    dev.aiDevText);
+  check('敌方发育不污染玩家 Armory', dev.playerUpgradesClean);
+  await page.evaluate(() => { window.__stickWar.state.aiGold = 100000; });
+  await page.waitForFunction(() => window.__stickWar.growth().upgrades > 0, null, { timeout: 30000 });
+  const tech = await page.evaluate(() => window.__stickWar.growth());
+  check('敌方自己花钱买科技', tech.upgrades > 0 && tech.planIndex > 0,
+    `${tech.upgrades} 级 / planIndex=${tech.planIndex}`);
 
   // 商店：打开、有 ×、× 能退、Esc 能退、点遮罩能退
   await page.click('#shopBtn');

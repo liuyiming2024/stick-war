@@ -29,7 +29,7 @@ src/assets.js    9 张 WebP 加载 / 两段式超时 / 染色与闪白预生成
 
 `src/main.js` 只做装配：创建 state / rng / assets / renderer / ui，用 `src/timing.js` 的固定步长累加器驱动 `step`，每帧调一次 `renderer.draw(state, assets)` 和 `ui.sync()`。素材加载完成后才 `enableStart()`；软超时（6s）先放行开战，硬超时（20s）才把没到的图记入缺失。
 
-**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 46 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
+**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 57 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
 
 ## 渲染：位图立绘 + 矢量特效（v2.5）
 
@@ -82,7 +82,9 @@ v2.6 把矢量从「美术」降级为「信息」：删掉岩块晶簇矿堆、
 
 **矿工**：`toMine → mining → toHome → 交付 → toMine`。`mineIndex` 由 `chooseMineIndex()` 按「同阵营 + 负载最少 + 距离最近」分配，交付后清空。`goldPerTrip` / `mineDuration` / `speed` 在 `spawnUnit()` 时由 Armory 等级派生固化。
 
-**训练队列**：`spawnPlayer()` 立即扣钱 → `enqueue({ due: elapsed + trainSec, upgrades: 快照 })` → `tickTraining()` 到点 `spawnUnit()` → `cancelTraining()` 全额退款。人口上限 = `countTeam + pendingTeam`。升级快照是浅拷贝。
+**训练队列**：`spawnPlayer()` 立即扣钱 → `enqueue({ due: elapsed + trainSec, upgrades: 快照 })` → `tickTraining()` 到点 `spawnUnit()` → `cancelTraining()` 全额退款。人口上限 = `countTeam + pendingTeam`。升级快照必须是 `{ [type]: levels }`（`bonusFor()` 取 `upgrades?.[type]`），只传单层 level 对象会让升级静默失效——v2.7 修掉了这个老 bug，玩家与 AI 两侧统一用 `aiEnqueue()` / `spawnPlayer()` 的同一结构。
+
+**AI 发育决策（v2.7）**：`step()` 里 `aiDecisionTimer` 每 `decisionIntervalSec` 触发一次 `aiDecide()`，一个 tick 只做一个动作，优先级 `补矿工 → 升科技 → 出兵`。`aiMinerCount()` 把训练队列里的矿工也算进去；`aiMinerTarget()` 按 `elapsed / rampSec` 从 3 涨到 6；`tryAiUpgrade()` 按 `ai.upgradePlan` 顺序扣 `upgrade.cost` 并写 `state.aiUpgrades`（与玩家 `state.upgrades` 完全隔离）；`aiEnqueue()` 真扣 `aiGold`、按 `diff.aiSpawnMul` 缩放训练时长、快照 AI 自己的 Armory。敌方矿工走与玩家相同的 `chooseMineIndex(state, 1, ...)` → `tickMiner()` → 交付写 `aiGold`（按 `diff.aiIncomeMul` 放大）。旧的 `tryAiSpawn()` 定时器刷兵已整体删除；`economy.aiGoldPerSec` 从 7 降到 1.5，钱不再是凭空来的。`aiGrowthInfo(state)` 是 UI / 结算 / 烟测的唯一口径。
 
 **指令**：`attack` 推到敌方判定线 / `defend` 守 `w*defendLineRatio` / `garrison` 全军回 `fortX()`。驻堡是 `step()` 里的短路分支：跳过 `tickFighter`/`tickMiner`，只 `moveToward(fortX())` 并置 `inFort`；`applyDamage()` 对 `inFort` 目标直接返回，输出交给 `tickFortArrows()`。不做短路的话 `nearestEnemy` 会把单位自己带出安全区。
 
@@ -100,7 +102,7 @@ v2.6 把矢量从「美术」降级为「信息」：删掉岩块晶簇矿堆、
 
 层级（低 → 高）：`canvas/背景 0` → `panelBackdrop 140` → `面板 150` → `controlBtns 160` → `queueStrip 165` → `topBar / bottomBar 170` → `pauseOverlay 180` → `mainMenu 200` → `toast 300`。控制条放在战场右上角（`top:52px`），避免与面板底部关闭按钮抢点击区域。
 
-每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处同样能退。`check-navigation.mjs` 静态守结构，`smoke-pages.mjs` 跑 49 项交互断言。
+每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处同样能退。`check-navigation.mjs` 静态守结构，`smoke-pages.mjs` 跑 56 项交互断言。
 
 ## 配置怎么做到的
 
@@ -118,7 +120,7 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 - **换配色**：只改 `presentation`，矢量特效、血条、UI 与位图阵营染色同时生效。
 - **换立绘**：替换 WebP 后同步更新 `manifest.json` 的 `w/h/webp`，`check-assets.mjs` 会校验字节数与 WebP 头。
 - **加投射物类型**：`makeProjectile()` / `drawProjectile()`；build 校验 `projectile` 取值。
-- **换 AI 策略**：只改 `tryAiSpawn()` / `aiInterval()`。当前 AI 不做针对性反制。
+- **换 AI 策略**：只改 `aiDecide()` 的优先级与 `ai.upgradePlan`；难度倍率在 `match.difficulties`。当前 AI 不做针对性反制。
 - **加音效 / 存档**：消费 `step()` 的 `events`，不要在渲染层偷偷改状态。
 - **换渲染层**：`renderer` 只依赖 `state` 与 `assets` 两个只读对象。
 
@@ -131,8 +133,9 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 | `tests/config.test.mjs` | 生成物无漂移、字段合法、双侧矿点、**assets 两段式超时 / animation 段 / 调色板** |
 | `tests/mechanics.test.mjs` | 训练队列/退款/升级快照/人口、三指令与驻堡、城堡射手、克制倍率、被动收入、矿工 Armory、难度 |
 | `tests/vector.test.mjs` | 位图图标引用、工具 SVG 自包含、无墙钟相位、步态只在移动时累加、fx 递减与暂停冻结、驻堡免疫 |
+| `tests/ai-growth.test.mjs` | 开局先补矿工、矿工目标与人口上限、真实运矿交付与自家半场、难度收益倍率、独立 Armory 与升级快照生效、60/120Hz 一致、重开清空 |
 | `scripts/check-assets.mjs` | 9 张 WebP 存在 / 字节数 / WebP 头尺寸、素材键与配置一致、零墙钟/随机/filter、animation 被真实消费、Pages 入口 |
-| `scripts/smoke-pages.mjs` | 49 项可达性（含 9 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**暂停画面静止 / 恢复后继续动画**） |
+| `scripts/smoke-pages.mjs` | 56 项可达性（含 9 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**暂停画面静止 / 恢复后继续动画**） |
 
 CI 另做全模块语法检查、配置漂移、导航静态自检、Pages 入口（含 `test -f assets/manifest.json` 与 `assets/*.webp` 数量 = 9）。Playwright 烟测需要本机 Chrome，CI 不跑（用静态自检兜底）。
 

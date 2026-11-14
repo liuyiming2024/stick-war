@@ -75,6 +75,32 @@ if (!(cfg.economy.castleGoldPerSec > 0 && cfg.match.fortArcherPerUnits > 0)) {
 if (!(cfg.assets?.softTimeoutSec > 0 && cfg.assets?.hardTimeoutSec > cfg.assets.softTimeoutSec)) {
   throw new Error('assets 软/硬超时配置不合理');
 }
+// v2.7：AI 必须真的发育——按顺序买矿工/科技，而不是按定时器凭空刷兵。
+const growth = cfg.ai;
+for (const key of ['decisionIntervalSec', 'rampSec', 'minerTargetStart', 'minerTargetEnd',
+  'minerReserveGold', 'militaryReserveGold', 'upgradeIntervalSec', 'upgradeReserveGold']) {
+  if (!(growth?.[key] > 0)) throw new Error(`ai.${key} 必须为正数`);
+}
+if (!(growth.minerTargetEnd >= growth.minerTargetStart)) {
+  throw new Error('ai.minerTargetEnd 不能小于 minerTargetStart');
+}
+if (!Array.isArray(growth.upgradePlan) || growth.upgradePlan.length === 0) {
+  throw new Error('ai.upgradePlan 必须是非空的升级序列');
+}
+for (const [i, entry] of growth.upgradePlan.entries()) {
+  if (!Array.isArray(entry) || entry.length !== 2) {
+    throw new Error(`ai.upgradePlan[${i}] 必须是 [type, stat]`);
+  }
+  const [type, stat] = entry;
+  if (!cfg.units[type]) throw new Error(`ai.upgradePlan[${i}] 未知兵种: ${type}`);
+  const stats = type === 'miner' ? ['bag', 'pick', 'spd'] : ['atk', 'def', 'spd'];
+  if (!stats.includes(stat)) {
+    throw new Error(`ai.upgradePlan[${i}] ${type} 不支持 ${stat}（可用 ${stats.join('/')}）`);
+  }
+}
+if (!(cfg.economy.aiStartGold > 0 && cfg.economy.aiGoldPerSec >= 0)) {
+  throw new Error('economy.aiStartGold / aiGoldPerSec 配置不合理');
+}
 
 const header = [
   '// 本文件由 scripts/build-config.mjs 自动生成，请勿手改。',

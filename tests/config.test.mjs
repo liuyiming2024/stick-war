@@ -28,8 +28,11 @@ test('每个兵种的数值字段齐备且时间单位合法', () => {
 test('固定步长与掉帧上限配置合理', () => {
   assert.ok(raw.match.fixedStep > 0 && raw.match.fixedStep <= 1 / 30);
   assert.ok(raw.match.maxFrameDelta >= raw.match.fixedStep * 3);
-  assert.ok(raw.ai.spawnIntervalMinSec > 0);
-  assert.ok(raw.ai.spawnIntervalSec >= raw.ai.spawnIntervalMinSec);
+  assert.ok(raw.ai.decisionIntervalSec > 0, 'AI 决策间隔必须为正');
+  assert.ok(raw.ai.minerTargetEnd >= raw.ai.minerTargetStart);
+  assert.ok(Array.isArray(raw.ai.upgradePlan) && raw.ai.upgradePlan.length > 0);
+  assert.ok(raw.economy.aiGoldPerSec < raw.economy.goldPerTrip,
+    '凭空收入必须小于一趟矿，否则发育没有意义');
 });
 
 test('雕像判定半径是绘制与伤害共用的同一个值', () => {

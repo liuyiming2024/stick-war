@@ -59,10 +59,13 @@ test('时间量全部按秒缩放：位移、冷却、AI 出兵都不再按帧�
 
   const d = playing();
   d.aiGold = 100000;
-  run(d, 3.0, 1 / 60);
-  assert.equal(d.training.length, 0, '3 秒短于首个出兵间隔');
-  run(d, 0.5, 1 / 60);
-  assert.ok(d.training.length >= 1, '出兵由秒级计时器驱动，而非每帧随机');
+  step(d, 1 / 60, createRng(3));
+  assert.equal(d.training.length, 0, '单帧不应触发 AI 决策');
+  run(d, C.ai.decisionIntervalSec - 0.05, 1 / 60);
+  assert.equal(d.training.length, 0, '未到决策间隔不应下单');
+  run(d, 0.1, 1 / 60);
+  assert.ok(d.training.length >= 1, 'AI 下单由秒级决策计时器驱动，而非每帧随机');
+  assert.equal(d.training[0].team, 1);
 });
 
 test('矿工真的往返运钱，而不是站着刷随机数', () => {
@@ -193,19 +196,21 @@ test('目标在飞行中死亡时投射物落空，不误伤旁边单位', () =>
   assert.equal(e2.hp, hp2, '死目标的箭不应转移给旁边的单位');
 });
 
-test('AI 兵种按解锁时间开放，出兵节奏随时间收紧', () => {
+test('AI 兵种按解锁时间开放，且开局先发育再出兵', () => {
   const s = playing();
   s.aiGold = 1e6;
   s.homeHp = 1e9;
   s.limits.aiPopMax = 1000;
   run(s, 10, 1 / 60, 3);
-  const early = s.units.filter((u) => u.team === 1).map((u) => u.type);
-  assert.ok(early.length >= 1, 'AI 应该出过兵');
-  assert.ok(early.every((t) => ['sword', 'spear', 'archer'].includes(t)),
-    `10 秒内不该出现未解锁兵种: ${early}`);
+  const fighters = s.units.filter((u) => u.team === 1 && u.kind !== 'miner').map((u) => u.type);
+  assert.ok(fighters.length >= 1, 'AI 应该出过战斗兵');
+  assert.ok(fighters.every((t) => ['sword', 'spear', 'archer'].includes(t)),
+    `10 秒内不该出现未解锁兵种: ${fighters}`);
+  assert.ok(s.stats.aiMinersTrained >= C.ai.minerTargetStart,
+    `开局应先补矿工，实际只训练了 ${s.stats.aiMinersTrained} 个`);
   run(s, 50, 1 / 60, 3);
-  assert.ok(s.stats.aiSpawned >= 20,
-    `60 秒内出兵 ${s.stats.aiSpawned} 次，间隔应已从 3.2s 明显收紧`);
+  assert.ok(s.stats.aiSpawned >= 10,
+    `60 秒内应已持续出兵 ${s.stats.aiSpawned} 次`);
 });
 
 test('对局统计随模拟累加，重开后归零', () => {

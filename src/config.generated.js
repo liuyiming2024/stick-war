@@ -3,8 +3,8 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.6.0",
-    "subtitle": "位图立绘 · 矢量仅作 HUD 标记"
+    "version": "2.7.0",
+    "subtitle": "位图立绘 · 敌方经济发育"
   },
   "layout": {
     "statueInset": 74,
@@ -86,8 +86,8 @@ export default Object.freeze({
     "goldPerTrip": 6,
     "mineDurationSec": 1.6,
     "mineArriveEps": 8,
-    "aiStartGold": 60,
-    "aiGoldPerSec": 7,
+    "aiStartGold": 120,
+    "aiGoldPerSec": 1.5,
     "castleGoldPerSec": 1,
     "bagPerLevel": 0.2,
     "pickaxePerLevel": 0.2
@@ -117,9 +117,72 @@ export default Object.freeze({
     }
   },
   "ai": {
-    "spawnIntervalSec": 3.2,
-    "spawnIntervalMinSec": 1.1,
-    "rampSec": 90
+    "decisionIntervalSec": 1.3,
+    "rampSec": 120,
+    "minerTargetStart": 3,
+    "minerTargetEnd": 6,
+    "minerReserveGold": 25,
+    "militaryReserveGold": 25,
+    "upgradeIntervalSec": 13,
+    "upgradeReserveGold": 20,
+    "upgradePlan": [
+      [
+        "miner",
+        "bag"
+      ],
+      [
+        "miner",
+        "pick"
+      ],
+      [
+        "sword",
+        "atk"
+      ],
+      [
+        "archer",
+        "atk"
+      ],
+      [
+        "sword",
+        "def"
+      ],
+      [
+        "spear",
+        "def"
+      ],
+      [
+        "miner",
+        "bag"
+      ],
+      [
+        "miner",
+        "pick"
+      ],
+      [
+        "stone",
+        "atk"
+      ],
+      [
+        "giant",
+        "def"
+      ],
+      [
+        "wizard",
+        "atk"
+      ],
+      [
+        "sword",
+        "spd"
+      ],
+      [
+        "archer",
+        "spd"
+      ],
+      [
+        "spear",
+        "atk"
+      ]
+    ]
   },
   "units": {
     "miner": {

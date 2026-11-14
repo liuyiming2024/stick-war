@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { createState, resetMatch } from './state.js';
 import { createRng } from './rng.js';
-import { step, minePositions, setDifficulty } from './simulation.js';
+import { step, minePositions, setDifficulty, aiGrowthInfo } from './simulation.js';
 import { createAssets } from './assets.js';
 import { createRenderer } from './render.js';
 import { createUI } from './ui.js';
@@ -95,4 +95,5 @@ window.__stickWar = {
   config: CONFIG,
   started: () => started,
   mines: () => minePositions(state),
+  growth: () => aiGrowthInfo(state),
 };

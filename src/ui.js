@@ -1,7 +1,7 @@
 import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js';
 import { unitIconHTML, toolSVG } from './icons.js';
 import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js';
-import { spawnPlayer, doUpgrade, setMode, cancelTraining } from './simulation.js';
+import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo } from './simulation.js';
 
 const C = CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -11,7 +11,7 @@ export function createUI(state, actions) {
     mainMenu: $('mainMenu'), gameUI: $('gameUI'), loadTip: $('loadTip'),
     startBtn: $('startBtn'), helpBtn: $('helpBtn'), menuSub: $('menuSub'),
     gold: $('gold'), pop: $('pop'), popMax: $('popMax'),
-    homeHp: $('homeHp'), enemyHp: $('enemyHp'), clock: $('clock'),
+    homeHp: $('homeHp'), enemyHp: $('enemyHp'), clock: $('clock'), aiDev: $('aiDev'),
     unitBar: $('unitBar'), shopGrid: $('shopGrid'), upgradeGrid: $('upgradeGrid'),
     shopPanel: $('shopPanel'), upgradePanel: $('upgradePanel'),
     backdrop: $('panelBackdrop'),
@@ -167,6 +167,9 @@ export function createUI(state, actions) {
     setText(el.pop, 'pop', String(pop + pendingTeam(state, 0)));
     setText(el.homeHp, 'homeHp', String(Math.max(0, Math.round(state.homeHp))));
     setText(el.enemyHp, 'enemyHp', String(Math.max(0, Math.round(state.enemyHp))));
+    const dev = aiGrowthInfo(state);
+    setText(el.aiDev, 'aiDev',
+      `敌方发育 矿工 ${dev.miners}/${dev.target} · 科技 ${dev.upgrades} · 金 ${Math.round(dev.gold)}`);
     const total = Math.floor(state.elapsed);
     setText(el.clock, 'clock', `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`);
 
@@ -252,6 +255,7 @@ export function createUI(state, actions) {
   function showEnd(result) {
     const won = result === 'won';
     toast(won ? '敌方雕像被摧毁，胜利！' : '我方雕像被摧毁，失败');
+    const dev = aiGrowthInfo(state);
     const total = Math.floor(state.elapsed);
     const clock = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
     showOverlay(
@@ -261,7 +265,8 @@ export function createUI(state, actions) {
       [
         `用时 ${clock} · 难度 ${C.match.difficulties[state.difficulty].label}`,
         `我方出兵 ${state.stats.playerSpawned} · 运矿 ${state.stats.trips} 趟`,
-        `敌方出兵 ${state.stats.aiSpawned} · 取消训练 ${state.stats.cancelled}`,
+        `敌方出兵 ${state.stats.aiSpawned} · 矿工 ${dev.minersTrained} 名 / ${dev.trips} 趟 · 科技 ${dev.upgrades} 级`,
+        `敌方累计采矿 ${Math.round(dev.earned)} 金 · 取消训练 ${state.stats.cancelled}`,
         `城堡弓箭 ${state.stats.fortArrows} 发`,
       ],
     );

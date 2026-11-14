@@ -1,7 +1,7 @@
-# 火柴人战争（网页版 v2.6）
+# 火柴人战争（网页版 v2.7）
 
 > 从「一个 18KB 的 `index.html` 包办一切」重构成模块化、可配置、可测试、可继续迭代的静态游戏。
-> v2.5：位图立绘回归，恢复仓库原有 9 张 WebP。v2.6：**矢量不再承担美术**——删掉所有手绘实体（岩块晶簇矿堆、箭杆/石块/法球、皮革背矿袋），只保留 HUD 级几何标记与功能性特效。手写 Canvas 路径两轮都没达到「够精美」，这轮做减法而不是第三版画风。
+> v2.5 位图立绘回归 → v2.6 矢量降级为 HUD → **v2.7：敌方也要发育**。AI 不再按定时器凭空刷兵，而是自己训练矿工、真实往返运矿、用 `upgradePlan` 花钱升科技，攒够预算才出兵；难度差异来自经济倍率与训练速度，而不是出兵间隔。
 
 [![CI](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml/badge.svg)](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml)
 
@@ -22,6 +22,41 @@ python3 -m http.server 4173
 
 无运行时构建步骤，改完刷新即可；只有改 `config/game.json` 才需要 `npm run build` 重新生成 `src/config.generated.js`。9 张 WebP 合计 **129816 字节 / 126.8 KiB**，两段式超时放行后即可开战，弱网下晚到的图片会补登记。
 
+## v2.7：敌方发育（不再哐哐派兵）
+
+**旧实现的问题**：`tryAiSpawn()` 每 `aiInterval` 秒扣一次金币造兵，`aiGold` 几乎全部来自 `aiGoldPerSec=7` 的凭空被动收入；`pool` 明确排除 miner，AI 从不造矿工、从不升级、也没有独立 Armory。观感就是对面无视经济规律一直派兵。
+
+**现在的模型**——AI 与玩家共用同一套经济，只多一份独立的成长状态：
+
+| 环节 | 实现 |
+| --- | --- |
+| 真实经济 | AI 训练矿工 → `chooseMineIndex(state, 1, ...)` 只挑自家半场 3 个矿点 → `tickMiner()` 往返 → 交付写 `state.aiGold`，按 `diff.aiIncomeMul` 放大 |
+| 独立科技 | `state.aiUpgrades` 与玩家 `state.upgrades` 完全隔离；按 `ai.upgradePlan`（先 miner 背包/镐，再 sword/archer 攻防…）顺序购买，扣 `upgrade.cost`，`aiUpgradeTimer` 节流 |
+| 决策状态机 | 每 `decisionIntervalSec=1.3` 一个 tick，**只做一个动作**，优先级 `补矿工 → 升科技 → 出兵`；矿工数按 `rampSec` 从 `minerTargetStart=3` 涨到 `minerTargetEnd=6` |
+| 预算约束 | 补矿工留 `minerReserveGold`，升级留 `upgradeReserveGold`，出兵留 `militaryReserveGold`；人口上限含训练队列，矿工被打掉会自动补回来 |
+| 训练队列 | AI 下单真扣钱、走同一个 `state.training`，训练时长 `trainSec * diff.aiSpawnMul`；难度越高训练越快，而不是出兵间隔越短 |
+| 升级快照 | `aiEnqueue()` 传 `{ [type]: { ...state.aiUpgrades[type] } }`，`bonusFor()` 真的读到，后续单位属性随科技成长 |
+
+`economy.aiGoldPerSec` 从 **7 降到 1.5**（低于一趟矿 `goldPerTrip=6`），`aiStartGold` 提到 120 与玩家对称。被动收入只剩零头，AI 的钱是矿工一趟趟跑出来的。
+
+**120 秒推演**（`node` 纯逻辑，seed=7，我方雕像血量顶住）：
+
+```
+ t(s) | 矿工 | 战斗兵 | 敌方金币 | 运矿趟 | 科技 | 累计采矿       (normal)
+   15 |    3 |      1 |       75 |      7 |    0 |    42
+   45 |    4 |      5 |       67 |     39 |    0 |   234
+   75 |    5 |      8 |       88 |     77 |    2 |   466
+  105 |    6 |      9 |      127 |    120 |    3 |   734
+
+insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
+```
+
+前 15 秒对面在铺经济，战斗兵个位数；金币全程在 40–130 之间波动（钱都花掉了，不是凭空堆积）；难度差距来自 `aiIncomeMul`（矿工每趟收益 ×1.7）与 `aiSpawnMul`（训练 ×0.6），而不是刷兵频率。
+
+**顺手修的真 bug**：`spawnPlayer()` 原来传的快照是 `{ ...state.upgrades[type] }` 单层对象，而 `bonusFor()` 取 `upgrades?.[type]` —— 玩家花 80 金买的攻防速**一直静默失效**。现在统一成 `{ [type]: levels }`，并加了回归测试断言训练出的剑士 `dmg === 14 × 1.15`。
+
+**UI 可见**：顶栏新增 `敌方发育 矿工 3/3 · 科技 2 · 金 75`（窄屏隐藏），结算面板追加敌方矿工数/运矿趟数/科技级数/累计采矿。`aiGrowthInfo(state)` 是 UI、结算与烟测共用的唯一口径。
+
 ## v2.6：矢量收口（做减法，不是第三版画风）
 
 结论很直接：**手写 Canvas 路径拼不过现成立绘，也不该去拼**。v2.3 的高饱和线稿、v2.4 的暗色剪影都翻车了，再画第三版只是换一种难看。所以这轮把矢量从「美术」降级为「信息」：
@@ -34,7 +69,7 @@ python3 -m http.server 4173
 
 保留的矢量全部是功能性 HUD，谈不上丑、且任意分辨率都锐利：血条、挖掘进度环、攻击弧、堡区护罩虚线、地面投影、金币迸发与飘尘粒子、雕像裂纹与光晕、工具按钮的 2 个内联 SVG。素材缺失时的线稿替身也保留（那是降级路径，不是常态美术）。
 
-`animation` 段 18/23 键仍被渲染层消费，相位约束、暂停冻结、`visualOffsets()`、46 单测、49 项烟测全部不变。
+`animation` 段 18/23 键仍被渲染层消费，相位约束、暂停冻结、`visualOffsets()` 全部不变。
 
 **这一步不是「精美矢量」**。想要矿点变成真正好看的插画，唯一稳妥路径是给一张与现有白色线稿同风格的 `assets/goldmine.webp`（更新 `manifest.json` 与 `check-assets.mjs` 断言即可），我不会再自作主张生成图片。
 
@@ -72,7 +107,8 @@ python3 -m http.server 4173
 | 城堡每秒被动产金 | `economy.castleGoldPerSec` 叠加矿工收入，AI 侧按难度放大 | `economy.castleGoldPerSec` |
 | 弓克剑、远程打不动巨人与雕像、矛士盾挡箭 | `combat.damageMatrix` 四个倍率 | `combat.damageMatrix` |
 | 矿工 Armory：背包 / 镐 / 移速 | 矿工升级维度 `bag/pick/spd`，派生 `goldPerTrip`、`mineDuration`、`speed` | `economy.bagPerLevel`、`pickaxePerLevel` |
-| 三档难度 | 放大 AI 收入、缩短出兵间隔、增加敌方雕像血量 | `match.difficulties` |
+| 三档难度 | 放大矿工收益（`aiIncomeMul`）、缩短训练时长（`aiSpawnMul`）、增加敌方雕像血量（`enemyStatueMul`）；**不再缩短出兵间隔** | `match.difficulties` |
+| 敌方也要采矿发育 | AI 训练矿工往返交付、独立 Armory 按计划升级、攒预算才出兵 | `ai.*`、`economy.aiGoldPerSec`、`state.aiUpgrades` |
 | 双侧矿脉、矿工就近挖自家矿 | `layout.goldMines` 双侧各 3 点，按负载/距离分配 | `layout.goldMines` |
 
 **刻意未实现**：单兵手动操控、战役地图/简报、Magikill 眩晕与召唤、Spearton 投矛、火/毒箭、存档、音效、AI 针对性反制。见「已知限制」。
@@ -97,7 +133,7 @@ python3 -m http.server 4173
 | 无超时、无脏检查 | 软/硬两段超时、UI 数值脏检查、支持 DPR |
 | manifest 有 `png/jpg` 幽灵字段、体积口径不准 | `check-assets.mjs` 逐项校验字节数并解析 WebP 头校验画布尺寸：**129816 字节 / 126.8 KiB / 9 文件，9/9 通过** |
 | 全内联 onclick、字符串拼 handler | 统一 `addEventListener`，兵种栏/商店/升级由 `icons.js` 生成 `<img>`，工具按钮用内联 SVG |
-| 无配置、无测试、无 CI | 单一配置源 + **46 个单测** + GitHub Actions |
+| 无配置、无测试、无 CI | 单一配置源 + **57 个单测** + GitHub Actions |
 | 全战场只有一个黄圈当金矿 | 双侧各 3 个矢量矿石堆，只挖自家半场 |
 | 面板/浮层没有关闭叉号 | 商店、升级、暂停、结算四层都有 `×`，外加 `Esc` 分级后退、点遮罩、底部关闭按钮 |
 
@@ -107,7 +143,7 @@ python3 -m http.server 4173
 index.html                    页面骨架
 styles/main.css               暗色 HUD、面板层级 z-index 约定、位图/SVG 动画与暂停冻结
 assets/                       9 张 WebP + manifest.json
-config/game.json              ★ 唯一配置源（含 assets 超时、animation、presentation）
+config/game.json              ★ 唯一配置源（含 ai 发育计划、assets 超时、animation、presentation）
 config/README.md              字段含义
 src/config.generated.js       生成物，必须提交
 src/config.js                 配置访问、ASSET_KEYS / assetPath、升级维度与倍率派生
@@ -115,17 +151,17 @@ src/assets.js                 位图加载、两段式超时、阵营染色与�
 src/icons.js                  兵种位图 <img> 与工具按钮内联 SVG
 src/timing.js                 固定步长累加器
 src/rng.js                    可注入的确定性随机源
-src/state.js                  纯状态 / 单位工厂 / 训练队列 / fx 视觉反馈
-src/simulation.js             纯逻辑：step / 训练 / 指令 / 城堡射手 / 克制 / 升级
+src/state.js                  纯状态 / 单位工厂 / 训练队列 / 玩家+敌方双 Armory / AI 决策计时器 / fx
+src/simulation.js             纯逻辑：step / 训练 / AI 发育决策 / 指令 / 城堡射手 / 克制 / 升级
 src/render.js                 位图立绘绘制 + 几何标记/HUD + 全部场景动画（不含实体插画）
 src/ui.js                     DOM 绑定、面板、队列条、快捷键
 src/main.js                   装配与主循环
 scripts/build-config.mjs      配置生成 + 结构校验
 scripts/check-assets.mjs      素材清单 / WebP 头 / 渲染确定性静态自检
 scripts/check-navigation.mjs  退出通道静态自检
-scripts/smoke-pages.mjs       Playwright 可达性烟测（49 项）
+scripts/smoke-pages.mjs       Playwright 可达性烟测（56 项）
 scripts/serve.mjs             零依赖静态服务
-tests/                         node:test，46 个用例（5 个文件）
+tests/                         node:test，57 个用例（6 个文件）
 docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 .github/workflows/ci.yml       CI
 ```
@@ -137,8 +173,8 @@ docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 ```bash
 vim config/game.json
 npm run build              # 重新生成 src/config.generated.js
-npm run smoke              # 可选：本机 Chrome 跑 49 项可达性断言
-npm run check              # 生成 + 46 单测 + 素材/确定性静态自检
+npm run smoke              # 可选：本机 Chrome 跑 56 项可达性断言
+npm run check              # 生成 + 57 单测 + 素材/确定性静态自检
 ```
 
 `src/config.generated.js` 必须一起提交（Pages 直出静态文件）。CI 用 `git diff --exit-code` 守住一致性。加新兵种要同时补 `assets/<key>.webp` 与 `assets/manifest.json`，UI 与渲染会自动长出；改动画节奏只动 `animation` 段，改配色只动 `presentation` 段。
@@ -169,10 +205,10 @@ npm run check              # 生成 + 46 单测 + 素材/确定性静态自检
 「可达」= **每个能进的层都能出、每份资源都能取到、暂停时画面真的静止**：
 
 ```bash
-npm run smoke     # 需要本机 Chrome；自动起静态服务，49 项断言
+npm run smoke     # 需要本机 Chrome；自动起静态服务，56 项断言
 ```
 
-覆盖：首页 200、9 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、训练队列下单/退款、驻堡切换、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
+覆盖：首页 200、9 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、训练队列下单/退款、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
 
 CI 里跑 `scripts/check-navigation.mjs` 与 `scripts/check-assets.mjs` 做静态兜底（不需要浏览器）。
 
