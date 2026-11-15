@@ -1,7 +1,7 @@
-import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.9.0';
-import { unitIconHTML, toolSVG, gemSVG } from './icons.js?v=2.9.0';
-import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.9.0';
-import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo, canAfford } from './simulation.js?v=2.9.0';
+import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.10.0';
+import { unitIconHTML, toolSVG, gemSVG } from './icons.js?v=2.10.0';
+import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.10.0';
+import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo, canAfford, championInfo } from './simulation.js?v=2.10.0';
 
 const C = CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -21,6 +21,8 @@ export function createUI(state, actions) {
     pauseBtn: $('pauseBtn'), difficulty: $('difficulty'), queueStrip: $('queueStrip'),
     camLeft: $('camLeft'), camRight: $('camRight'), camFollow: $('camFollow'),
     assetBadge: $('assetBadge'),
+    championBar: $('championBar'), championName: $('championName'),
+    champExit: $('champExit'), champHoldLeft: $('champHoldLeft'), champHoldRight: $('champHoldRight'),
     overlay: $('pauseOverlay'), toastEl: $('toast'),
   };
   const unitButtons = new Map();
@@ -193,6 +195,10 @@ export function createUI(state, actions) {
     el.pauseBtn.setAttribute('aria-pressed', String(state.phase === 'paused'));
     el.pauseBtn.textContent = state.phase === 'paused' ? '继续' : '暂停';
     el.camFollow.setAttribute('aria-pressed', String(!!state.view.follow));
+    const champ = championInfo(state);
+    const showChamp = champ.active && state.phase === 'playing';
+    if (el.championBar.hidden === showChamp) el.championBar.hidden = !showChamp;
+    if (showChamp) setText(el.championName, 'championName', champ.name);
     for (const { key, stat, node } of upgradeButtons) {
       const disabled = !playable || !canAfford(state, C.upgrade.cost) ||
         upgradeLevels(state, key)[stat] >= C.upgrade.maxLevel;
@@ -277,8 +283,23 @@ export function createUI(state, actions) {
         `敌方累计采矿 ${Math.round(dev.earned)} 金 · 取消训练 ${state.stats.cancelled}`,
         `城堡弓箭 ${state.stats.fortArrows} 发`,
         `领取宝石 ${state.stats.gemsGranted} 次 · 抵扣 ${state.stats.gemsSpent} 颗`,
+        `单兵指挥 ${Math.floor(state.control.seconds)} 秒 · 手动移动 ${Math.round(state.control.distance)} px`,
       ],
     );
+  }
+
+  // v2.10：用集合记录按住的方向键，避免左右同时按住时松开一个就误归零。
+  const axisKeys = new Set();
+  function applyAxis() {
+    const left = axisKeys.has('ArrowLeft');
+    const right = axisKeys.has('ArrowRight');
+    actions.setControlAxis(left === right ? 0 : (left ? -1 : 1));
+  }
+  function handleKeyUp(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if (!axisKeys.delete(e.key)) return;
+    applyAxis();
+    e.preventDefault();
   }
 
   function handleKey(e) {
@@ -291,6 +312,11 @@ export function createUI(state, actions) {
     if (k === 'Escape') {
       e.preventDefault();
       if (!el.shopPanel.hidden || !el.upgradePanel.hidden) { closePanels(); return; }
+      if (championInfo(state).active) {
+        axisKeys.clear();
+        actions.releaseChampion();
+        return;
+      }
       if (state.phase === 'paused') { actions.togglePause(); return; }
       if (isTerminal(state)) { actions.goMenu(); return; }
       closePanels();
@@ -298,6 +324,14 @@ export function createUI(state, actions) {
     }
     if (k === 'p' || k === 'P') { actions.togglePause(); e.preventDefault(); return; }
     if (state.phase !== 'playing') return;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') {
+      if (championInfo(state).active) {
+        axisKeys.add(k);
+        applyAxis();
+        e.preventDefault();
+      }
+      return;
+    }
     if (/^[1-9]$/.test(k)) {
       const type = UNIT_ORDER[Number(k) - 1];
       if (type) { spawn(type); e.preventDefault(); }
@@ -330,6 +364,23 @@ export function createUI(state, actions) {
     el.camLeft.addEventListener('click', () => actions.pan(-1));
     el.camRight.addEventListener('click', () => actions.pan(1));
     el.camFollow.addEventListener('click', () => actions.toggleFollow());
+    // 每个能进的层都要有明确退路：指挥条自带 ×，Esc 也能退。
+    el.champExit.addEventListener('click', () => {
+      axisKeys.clear();
+      actions.releaseChampion();
+    });
+    const hold = (node, dir) => {
+      node.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        try { node.setPointerCapture(e.pointerId); } catch { /* 非指针设备忽略 */ }
+        actions.setControlAxis(dir);
+      });
+      for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+        node.addEventListener(ev, () => applyAxis());
+      }
+    };
+    hold(el.champHoldLeft, -1);
+    hold(el.champHoldRight, 1);
     $('shopBtn').addEventListener('click', () => openPanel('shop'));
     $('upgradeBtn').addEventListener('click', () => openPanel('upgrade'));
     // 每个面板都有两条退路：底部文字按钮 + 右上角 ×
@@ -339,6 +390,7 @@ export function createUI(state, actions) {
     el.backdrop.addEventListener('click', closePanels);
     el.overlay.addEventListener('click', () => overlayHandler?.());
     document.addEventListener('keydown', handleKey);
+    document.addEventListener('keyup', handleKeyUp);
     el.popMax.textContent = String(state.limits.popMax);
     el.menuSub.textContent = `${C.meta.subtitle} · v${C.meta.version}`;
     document.title = C.meta.title;

@@ -3,8 +3,8 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.9.0",
-    "subtitle": "位图立绘 · 宝石无限 · 轻松难度"
+    "version": "2.10.0",
+    "subtitle": "位图立绘 · 宝石无限 · 单兵指挥"
   },
   "world": {
     "width": 1600,
@@ -58,6 +58,14 @@ export default Object.freeze({
     "giantHeightMul": 1.5,
     "minerHeightMul": 0.95,
     "canvasBottomReserve": 120
+  },
+  "control": {
+    "enabled": true,
+    "selectRadiusPx": 90,
+    "moveSpeedMul": 1.15,
+    "clickMaxSlopPx": 7,
+    "clickMaxMs": 350,
+    "_note": "点战场选中我方单位进入单兵指挥；方向键/按住按钮手动移动，攻击与拆雕像仍自动；Esc 或 × 退出。手动控制优先于攻/守/驻指令。"
   },
   "gems": {
     "label": "宝石",
@@ -434,6 +442,8 @@ export default Object.freeze({
     "gem": "#8fd8ea",
     "gemLight": "#dff6ff",
     "gemDark": "#397d96",
+    "champion": "#ffe0a0",
+    "championGlow": "rgba(255,224,160,.28)",
     "rockDark": "#394039",
     "rockLight": "#5d6659",
     "crack": "rgba(12,18,20,.72)",

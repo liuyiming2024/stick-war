@@ -1,11 +1,12 @@
-import { CONFIG, ASSET_KEYS } from './config.js?v=2.9.0';
-import { createState, resetMatch } from './state.js?v=2.9.0';
-import { createRng } from './rng.js?v=2.9.0';
-import { step, minePositions, setDifficulty, aiGrowthInfo, grantGems } from './simulation.js?v=2.9.0';
-import { createAssets } from './assets.js?v=2.9.0';
-import { createRenderer } from './render.js?v=2.9.0';
-import { createUI } from './ui.js?v=2.9.0';
-import { createFixedStepDriver } from './timing.js?v=2.9.0';
+import { CONFIG, ASSET_KEYS } from './config.js?v=2.10.0';
+import { createState, resetMatch } from './state.js?v=2.10.0';
+import { createRng } from './rng.js?v=2.10.0';
+import { step, minePositions, setDifficulty, aiGrowthInfo, grantGems,
+  selectChampion, releaseChampion, setControlAxis, championInfo } from './simulation.js?v=2.10.0';
+import { createAssets } from './assets.js?v=2.10.0';
+import { createRenderer } from './render.js?v=2.10.0';
+import { createUI } from './ui.js?v=2.10.0';
+import { createFixedStepDriver } from './timing.js?v=2.10.0';
 
 const canvas = document.getElementById('canvas');
 const state = createState();
@@ -53,21 +54,28 @@ const ui = createUI(state, {
     ui.sync();
   },
   goMenu() {
+    setControlAxis(state, 0);
+    releaseChampion(state);
     state.phase = 'menu';
     ui.showMenu();
     driver.reset();
   },
   togglePause() {
     if (state.phase === 'playing') {
+      setControlAxis(state, 0);
       state.phase = 'paused';
       ui.showPause(true);
     } else if (state.phase === 'paused') {
+      setControlAxis(state, 0);
       state.phase = 'playing';
       ui.showPause(false);
       driver.reset();
       last = performance.now();
     }
   },
+  selectChampion(worldX) { return selectChampion(state, worldX); },
+  releaseChampion() { releaseChampion(state); ui.sync(); },
+  setControlAxis(axis) { setControlAxis(state, axis); },
 });
 
 // 固定步长：60Hz / 144Hz / 掉帧都得到同一份模拟结果，刷新率不再决定难度。
@@ -85,21 +93,41 @@ function onResize() {
   renderer.resize(state);
 }
 
-// 窄屏横向拖动战场；拖动会暂时关掉自动跟随，点「跟随」可再打开。
-let dragX = null;
+// 窄屏横向拖动战场；位移超过阈值才算拖动并关掉跟随，轻点则选中我方单位。
+// v2.10 用「位移 + 时长」双阈值区分点击与拖动，避免点选把镜头带跑。
+let drag = null;
 canvas.addEventListener('pointerdown', (e) => {
   if (state.phase !== 'playing') return;
-  dragX = e.clientX;
+  drag = { x: e.clientX, startX: e.clientX, startY: e.clientY, startT: e.timeStamp, moved: 0 };
   try { canvas.setPointerCapture(e.pointerId); } catch { /* 非指针设备忽略 */ }
 });
 canvas.addEventListener('pointermove', (e) => {
-  if (dragX === null) return;
-  const dx = e.clientX - dragX;
-  dragX = e.clientX;
-  if (dx) renderer.panBy(state, dx);
+  if (!drag) return;
+  const dx = e.clientX - drag.x;
+  drag.x = e.clientX;
+  drag.moved = Math.max(drag.moved, Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY));
+  if (dx && drag.moved >= CONFIG.control.clickMaxSlopPx) renderer.panBy(state, dx);
 });
-for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-  canvas.addEventListener(ev, () => { dragX = null; });
+canvas.addEventListener('pointerup', (e) => {
+  const d = drag;
+  drag = null;
+  if (!d || state.phase !== 'playing') return;
+  const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
+  const dur = (e.timeStamp ?? d.startT) - d.startT;
+  if (dist > CONFIG.control.clickMaxSlopPx || dur > CONFIG.control.clickMaxMs) return;
+  const rect = canvas.getBoundingClientRect();
+  const worldX = state.view.x + (e.clientX - rect.left) / state.view.scale;
+  const wasActive = championInfo(state).active;
+  const r = selectChampion(state, worldX);
+  if (r.ok) {
+    ui.toast(`已接管 ${CONFIG.units[r.unit].name} · ←/→ 或按住 ◀▶ 移动 · Esc / × 退出`);
+  } else if (wasActive) {
+    ui.toast('已退出指挥');
+  }
+  ui.sync();
+});
+for (const ev of ['pointercancel', 'lostpointercapture']) {
+  canvas.addEventListener(ev, () => { drag = null; });
 }
 
 window.addEventListener('resize', onResize);
@@ -122,4 +150,10 @@ window.__stickWar = {
   started: () => started,
   mines: () => minePositions(state),
   growth: () => aiGrowthInfo(state),
+  control: {
+    select: (worldX) => selectChampion(state, worldX),
+    release: () => releaseChampion(state),
+    axis: (a) => setControlAxis(state, a),
+    info: () => championInfo(state),
+  },
 };

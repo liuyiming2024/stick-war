@@ -1,7 +1,7 @@
 // 纯逻辑层：完全不碰 DOM / canvas / window。
 // 所有时间量单位为秒，所有速度单位为 px/s；由 main.js 的固定步长驱动。
-import { CONFIG, UNIT_ORDER } from './config.js?v=2.9.0';
-import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.9.0';
+import { CONFIG, UNIT_ORDER } from './config.js?v=2.10.0';
+import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.10.0';
 
 const C = CONFIG;
 
@@ -116,7 +116,20 @@ function fire(state, u, target, events) {
   }
 }
 
-function tickFighter(state, u, dt, events) {
+/**
+ * v2.10：被玩家接管的单位只把「往哪走」交给 axis，攻击判定与拆雕像仍与
+ * 自动单位完全同源（同一套 fire / statueHit），避免出现两套伤害口径。
+ */
+function moveChampion(state, u, dt) {
+  const axis = state.control.axis;
+  if (!axis) return;
+  const speed = u.speed * C.control.moveSpeedMul;
+  const nx = Math.min(state.w, Math.max(0, u.x + axis * speed * dt));
+  state.control.distance += Math.abs(nx - u.x);
+  u.x = nx;
+}
+
+function tickFighter(state, u, dt, events, manual = false) {
   const line = u.team === 0 ? statueRightLine(state) : statueLeftLine(state);
   const found = nearestEnemy(state, u);
   const target = found?.unit ?? null;
@@ -127,6 +140,8 @@ function tickFighter(state, u, dt, events) {
       u.attackCd = u.baseAttackIntervalSec;
       u.atkAnim = C.combat.attackAnimSec;
     }
+  } else if (manual) {
+    moveChampion(state, u, dt);   // 有敌人但够不着时也不自动追击
   } else if (target) {
     moveToward(u, target.x, dt, Math.max(2, u.range * 0.5));
   } else {
@@ -579,6 +594,7 @@ export function step(state, dt, rng) {
   const diff = difficultyOf(state);
 
   state.elapsed += dt;
+  if (state.control.championId !== null) state.control.seconds += dt;
   // 视觉反馈计时器按秒递减：暂停时 step 不跑，所有相位冻结。
   for (const k of Object.keys(state.fx)) state.fx[k] = Math.max(0, state.fx[k] - dt);
   // 原版：城堡每秒 1 金，矿工补齐其余。v2.7 把 aiGoldPerSec 从 7 降到 1.5，
@@ -612,9 +628,15 @@ export function step(state, dt, rng) {
     if (u.hp <= 0) continue;
     const udt = freshTime.get(u.id) ?? dt;
     const x0 = u.x;
+    // v2.10：玩家接管优先于攻/守/驻三条指令——手动控制就该说了算。
+    const isChamp = C.control.enabled && state.control.championId === u.id && u.team === 0;
+    if (isChamp) {
+      // 矿工被接管时不挖矿、不交付，只跟着 axis 走；战斗兵保留自动攻击/拆雕像。
+      if (u.kind === 'miner') moveChampion(state, u, udt);
+      else tickFighter(state, u, udt, events, true);
     // 原版 Garrison：全军撤回堡内，不追击、不挖矿，输出交给城堡射手。
     // 否则单位会因为 nearestEnemy 自己走出安全区，驻堡就失去意义。
-    if (state.gameMode === 'garrison' && u.team === 0) {
+    } else if (state.gameMode === 'garrison' && u.team === 0) {
       moveToward(u, fortX(), udt, 3, true);
       u.inFort = u.x <= fortX() + C.economy.mineArriveEps;
     } else if (u.kind === 'miner') {
@@ -636,6 +658,13 @@ export function step(state, dt, rng) {
   state.units = state.units.filter((u) => u.hp > 0 && u.x > -60 && u.x < state.w + 60);
   if (state.units.length < before) events.push({ type: 'death' });
 
+  // 指挥单位阵亡/出界：自动释放并清零输入，避免 UI 停在「指挥中」而 axis 还留着。
+  if (state.control.championId !== null &&
+      !state.units.some((u) => u.id === state.control.championId)) {
+    releaseChampion(state);
+    events.push({ type: 'championLost' });
+  }
+
   if (state.homeHp <= 0) {
     state.homeHp = 0;
     state.phase = 'lost';
@@ -649,6 +678,64 @@ export function step(state, dt, rng) {
 }
 
 /** 下单即扣钱、进入训练队列；训练完成才出场。升级在下单时快照。 */
+// ── v2.10：单兵指挥 ─────────────────────────────────────────────────────
+/** 顶栏/指挥条/结算/烟测共用的唯一口径。 */
+export function championInfo(state) {
+  const c = state.control;
+  const u = c.championId === null ? null
+    : state.units.find((v) => v.id === c.championId && v.hp > 0) ?? null;
+  return {
+    active: !!u,
+    id: u?.id ?? null,
+    type: u?.type ?? null,
+    name: u ? C.units[u.type].name : null,
+    x: u?.x ?? null,
+    axis: c.axis,
+    seconds: c.seconds,
+    distance: c.distance,
+    selectedAt: c.selectedAt,
+    switches: state.stats.championSwitches,
+  };
+}
+
+/** 点战场：选中最靠近 worldX 的我方单位；点空处等价于退出指挥。 */
+export function selectChampion(state, worldX) {
+  if (state.phase !== 'playing' || !C.control.enabled) {
+    return { ok: false, reason: '当前不能指挥' };
+  }
+  let best = null;
+  let bd = Infinity;
+  for (const u of state.units) {
+    if (u.team !== 0 || u.hp <= 0) continue;
+    const d = Math.abs(u.x - worldX);
+    if (d < bd) { bd = d; best = u; }
+  }
+  if (!best || bd > C.control.selectRadiusPx) {
+    releaseChampion(state);
+    return { ok: false, reason: '附近没有我方单位' };
+  }
+  if (state.control.championId !== best.id) state.stats.championSwitches++;
+  state.control.championId = best.id;
+  state.control.axis = 0;
+  state.control.selectedAt = state.elapsed;
+  return { ok: true, id: best.id, unit: best.type, distance: bd };
+}
+
+export function releaseChampion(state) {
+  const wasActive = state.control.championId !== null;
+  state.control.championId = null;
+  state.control.axis = 0;
+  return { ok: true, wasActive };
+}
+
+/** 键盘 / 按住按钮写入 -1 / 0 / 1；暂停或未选中时不留残留输入。 */
+export function setControlAxis(state, axis) {
+  state.control.axis = state.phase === 'playing' && state.control.championId !== null
+    ? (axis > 0 ? 1 : axis < 0 ? -1 : 0)
+    : 0;
+  return state.control.axis;
+}
+
 export function spawnPlayer(state, type) {
   if (state.phase !== 'playing') return { ok: false, reason: '未在对局中' };
   const cfg = C.units[type];

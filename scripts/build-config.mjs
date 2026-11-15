@@ -144,6 +144,14 @@ if ('cooldownSec' in gems || 'maxTotal' in gems || 'cost' in gems) {
   throw new Error('宝石必须免费且无限领取，不允许 cooldownSec/maxTotal/cost');
 }
 if (!(cfg.match.startingGold >= 0)) throw new Error('match.startingGold 配置不合理');
+// v2.10：单兵指挥。速度倍率 > 0，点击阈值不能大到把「拖动平移」误判成选中。
+const ctl = cfg.control;
+for (const k of ['selectRadiusPx', 'moveSpeedMul', 'clickMaxSlopPx', 'clickMaxMs']) {
+  if (!(ctl?.[k] > 0)) throw new Error(`control.${k} 必须为正数`);
+}
+if (ctl.enabled !== true) throw new Error('control.enabled 必须为 true');
+if (ctl.clickMaxSlopPx > 24) throw new Error('control.clickMaxSlopPx 过大会与拖动平移冲突');
+if (!(ctl.moveSpeedMul <= 3)) throw new Error('control.moveSpeedMul 不应超过 3 倍');
 // 难度整体下调：普通档必须比疯狂档更宽松（收入更低、训练更慢、雕像更薄）。
 const dn = cfg.match.difficulties.normal, di = cfg.match.difficulties.insane;
 if (!(dn.aiIncomeMul < di.aiIncomeMul && dn.aiSpawnMul > di.aiSpawnMul &&

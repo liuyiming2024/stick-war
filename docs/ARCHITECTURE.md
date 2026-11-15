@@ -24,12 +24,12 @@ src/render.js    src/ui.js
  特效与全部动画
    ▲
    │
-src/assets.js    10 张 WebP 加载 / 两段式超时 / 染色与闪白预生成
+src/assets.js    10 张 WebP 加载 / 两段式超时 + 单次重试 / 染色与闪白预生成
 ```
 
-`src/main.js` 只做装配：创建 state / rng / assets / renderer / ui，用 `src/timing.js` 的固定步长累加器驱动 `step`，每帧调一次 `renderer.draw(state, assets)` 和 `ui.sync()`。素材加载完成后才 `enableStart()`；软超时（6s）先放行开战，硬超时（20s）才把没到的图记入缺失。
+`src/main.js` 只做装配与输入：创建 state / rng / assets / renderer / ui，用 `src/timing.js` 的固定步长累加器驱动 `step`，每帧调一次 `renderer.draw(state, assets)` 和 `ui.sync()`；canvas 上用双阈值区分点选与拖动平移。素材加载完成后才 `enableStart()`；软超时（9s）先放行开战，硬超时（26s）才把没到的图记入缺失。
 
-**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 82 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
+**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 96 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
 
 ## 渲染：位图立绘 + 矢量特效（v2.5）
 
@@ -100,9 +100,9 @@ v2.6 把矢量从「美术」降级为「信息」：删掉岩块晶簇矿堆、
 
 `ui.js` 里只有两个面板状态入口：`openPanel(which)`（互斥打开）和 `closePanels()`（同时收起遮罩）。**不要在别处直接改 `panel.hidden`**。
 
-层级（低 → 高）：`canvas/背景 0` → `panelBackdrop 140` → `面板 150` → `controlBtns 160` → `queueStrip 165` → `topBar / bottomBar 170` → `pauseOverlay 180` → `mainMenu 200` → `toast 300`。控制条放在战场右上角（`top:52px`），避免与面板底部关闭按钮抢点击区域。
+层级（低 → 高）：`canvas/背景 0` → `panelBackdrop 140` → `面板 150` → `controlBtns 160` → `queueStrip 165` → `topBar / bottomBar 170` → **`championBar 175`** → `pauseOverlay 180` → `mainMenu 200` → `toast 300`。控制条放在战场右上角（`top:52px`）；指挥条窄屏移到底栏上方且高于面板，保证它的 `×` 永远可点。
 
-每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处同样能退。`check-navigation.mjs` 静态守结构，`smoke-pages.mjs` 跑 76 项交互断言。
+每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 指挥 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处、**战场空白处**同样能退。`check-navigation.mjs` 静态守结构（含指挥条控件与方向键处理），`smoke-pages.mjs` 跑 85 项交互断言。
 
 ## 配置怎么做到的
 
@@ -120,7 +120,8 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 - **换配色**：只改 `presentation`，矢量特效、血条、UI 与位图阵营染色同时生效。
 - **换立绘**：替换 WebP 后同步更新 `manifest.json` 的 `w/h/webp`，`check-assets.mjs` 会校验字节数与 WebP 头。
 - **加投射物类型**：`makeProjectile()` / `drawProjectile()`；build 校验 `projectile` 取值。
-- **换 AI 策略**：只改 `aiDecide()` 的优先级与 `ai.upgradePlan`；难度倍率在 `match.difficulties`。当前 AI 不做针对性反制。
+- **换 AI 策略**：只改 `aiDecide()` 的优先级、`ai.upgradePlan` 与 `ai.counterMatrix`；难度倍率在 `match.difficulties`。当前 AI 会按玩家兵种调权重，但不做集火与撤退路径规划。
+- **改单兵指挥**：`control` 配置段 + `selectChampion/releaseChampion/setControlAxis`；手动移动只在 `moveChampion()`，攻击判定必须继续复用 `tickFighter`。
 - **加音效 / 存档**：消费 `step()` 的 `events`，不要在渲染层偷偷改状态。
 - **换渲染层**：`renderer` 只依赖 `state` 与 `assets` 两个只读对象。
 
@@ -136,9 +137,32 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 | `tests/ai-growth.test.mjs` | 开局先补矿工、矿工目标与人口上限、真实运矿交付与自家半场、难度收益倍率、独立 Armory 与升级快照生效、60/120Hz 一致、重开清空 |
 | `scripts/check-assets.mjs` | 10 张 WebP 存在 / 字节数 / WebP 头尺寸、素材键与配置一致、零墙钟/随机/filter、animation 被真实消费、Pages 入口 |
 | `tests/world-waves.test.mjs` | 固定世界与窄屏视口、矿距/中线、负重减速、克制权重与饱和、波次阶段流转/波容/帧率一致/重开 |
-| `scripts/smoke-pages.mjs` | 76 项可达性（含 10 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头按钮/宽屏 resize**、暂停画面静止 / 恢复后继续动画） |
+| `tests/gems.test.mjs` | 免费无限领取、1:1 购买力、实扣构成与整颗取整、取消原路退款、升级支付、难度下调与兜底 |
+| `tests/control.test.mjs` | 选中/点空处释放、手动覆盖自动推进与驻堡、攻击与拆雕像同源、矿工接管、死亡自动释放、暂停清输入、60/120Hz 一致、重开清空 |
+| `scripts/smoke-pages.mjs` | 85 项可达性（含 10 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头按钮/宽屏 resize**、暂停画面静止 / 恢复后继续动画） |
 
 CI 另做全模块语法检查、配置漂移、导航静态自检、Pages 入口（含 `test -f assets/manifest.json` 与 `assets/*.webp` 数量 = 10）。Playwright 烟测需要本机 Chrome，CI 不跑（用静态自检兜底）。
+
+## 单兵指挥（v2.10）
+
+`state.control = { championId, axis, selectedAt, seconds, distance }`。`championId` 指向一个我方单位；`axis ∈ {-1,0,1}` 由键盘 `ArrowLeft/Right` 或按住按钮写入（`ui.js` 用 `Set` 记录同时按住的键，`keyup` 重算，避免左右同按时松开一个误归零）。
+
+`selectChampion(state, worldX)` 取最靠近的我方单位（半径 `control.selectRadiusPx`），点空处即 `releaseChampion()`。四个 API 与 `championInfo(state)` 都在纯逻辑层，不依赖浏览器全局。
+
+`step()` 的单位循环里 `isChamp` 分支**优先于 garrison**：
+
+```
+if (isChamp)  u.kind === 'miner' ? moveChampion(...) : tickFighter(..., manual=true)
+else if (garrison && team===0) ...
+```
+
+`tickFighter(..., manual=true)` 只把「追击 / 按指令推进」替换为 `moveChampion()`；`fire()`、`statueHit`、`attackCd` 全部沿用同一条路径，不存在第二套伤害口径。矿工被接管时不进 `tickMiner()`，阶段机停住，释放后从原状态继续。
+
+生命周期：单位被 `filter` 掉（阵亡/出界）时自动 `releaseChampion()` 并 `push({type:'championLost'})`；`goMenu` / `togglePause` 清 `axis`；`resetMatch()` 通过 `createState()` 整体重建。`setControlAxis()` 在非 playing 或无 champion 时强制返回 0。
+
+**点击 vs 拖动**：`main.js` 记录 `startX/startY/startT/moved`，`pointerup` 时只有 `dist ≤ clickMaxSlopPx && dur ≤ clickMaxMs` 才算点选，屏幕 x 经 `view.x + (clientX - rect.left) / view.scale` 换算回世界坐标；超过阈值才 `panBy()` 并关闭跟随。`build-config.mjs` 拒绝 `clickMaxSlopPx > 24`。
+
+渲染层 `drawChampionRing()` 只画地面脉动环与头顶菱形（相位取 `state.elapsed`），不新增实体多边形，`check-assets.mjs` 的 `poly()` 上限仍守着。
 
 ## 固定世界与镜头（v2.8）
 

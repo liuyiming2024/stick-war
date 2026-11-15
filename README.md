@@ -1,7 +1,7 @@
-# 火柴人战争（网页版 v2.9.0）
+# 火柴人战争（网页版 v2.10.0）
 
 > 从「一个 18KB 的 `index.html` 包办一切」重构成模块化、可配置、可测试、可继续迭代的静态游戏。
-> v2.8 移动端视口 / 位图金矿 / 波次指挥 → **v2.9：宝石无限 + 难度整体下调**。底栏「领宝石」免费、无冷却、无上限，金币不足自动 1:1 抵扣，出兵与升级都直接当金币花；三档难度倍率、首波规模、集结节奏全面放缓，起始金币提到 200。
+> v2.9 宝石无限 / 难度下调 → **v2.10：单兵指挥**。点战场接管任意一个我方单位，方向键或按住 ◀▶ 手动走位，攻击与拆雕像仍自动；指挥条自带 ×、Esc 与点空处都能退。补齐原版最核心的缺失机制，不改数值难度，只多一层微操。
 
 [![CI](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml/badge.svg)](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml)
 
@@ -21,6 +21,48 @@ python3 -m http.server 4173
 ```
 
 无运行时构建步骤，改完刷新即可；只有改 `config/game.json` 才需要 `npm run build` 重新生成 `src/config.generated.js` 与 ESM 版本指纹。10 张 WebP 合计 **289404 字节 / 282.6 KiB**，两段式超时（9s / 26s）+ 单次失败重试放行后即可开战，弱网下晚到的图片会补登记；顶栏 `位图 10/10` 徽标可随时核验。
+
+## v2.10：单兵指挥（原版最核心的缺失机制）
+
+之前「已知限制」里一直挂着「没有单兵手动操控」。这轮补上，且**不动任何数值难度**——只是多一层微操，纯自动打法完全不受影响。
+
+### 接管与退路
+
+点战场任意位置 → `selectChampion(state, worldX)` 取最靠近我方单位（半径 `selectRadiusPx=90` 世界像素）。点空处等价于退出。被接管的单位：
+
+- **往哪走**交给 `state.control.axis ∈ {-1,0,1}`，速度 = `u.speed × moveSpeedMul(1.15)`；
+- **攻击与拆雕像仍走自动同源路径**——`tickFighter(..., manual=true)` 只把「追击 / 推进」换成 `moveChampion()`，`fire()` 与 `statueHit` 判定一行没改，避免两套伤害口径；
+- 接管优先于攻/守/驻三条指令（`isChamp` 分支放在 `garrison` 之前），否则手动控制会被驻堡逻辑拖回去；
+- 矿工被接管时不挖矿、不交付，松开后阶段机从原状态继续；
+- 单位阵亡/出界自动释放并清 `axis`，不会留一个「指挥中」的死 UI。
+
+渲染只加一圈脉动地面环 + 头顶菱形（功能性 HUD，相位仍取 `state.elapsed`，暂停即冻结），`render.js` 依旧零墙钟 / 零随机 / 零 `ctx.filter`。
+
+### 三条退出通道（延续「每个能进的层都要有 ×」）
+
+| 方式 | 实现 |
+| --- | --- |
+| 指挥条 `× 退出` | `#champExit` → `releaseChampion()`，窄屏时指挥条移到底栏上方且 `z-index:175`，不会被面板盖住 |
+| `Esc` | 分级后退改为 `面板 → 指挥 → 暂停 → 结算 → 主菜单` |
+| 点战场空白处 | `selectChampion` 找不到单位时直接释放 |
+
+移动端另有两个按住按钮 `#champHoldLeft/Right`（`pointerdown` 设 axis，`pointerup/cancel/lostpointercapture` 归零，`setPointerCapture` 保证在按钮外松开也能收到）；键盘用 `ArrowLeft/Right`，`Set` 记录同时按住的键，避免左右同按时松开一个就误归零。暂停/回菜单都会清 `axis`，恢复后不会突然自己走。
+
+**点击 vs 拖动**：canvas 上原本只有横向拖动平移。现在用「位移 ≤ `clickMaxSlopPx=7` 且时长 ≤ `clickMaxMs=350`」双阈值区分——轻点选中，超过阈值才 `panBy()` 并关闭跟随，几像素的手抖不会把镜头带跑。`build-config.mjs` 会拒绝把 `clickMaxSlopPx` 配到 >24。
+
+`championInfo(state)` 是 UI、结算、烟测共用的唯一口径；结算面板追加指挥秒数与手动移动距离。
+
+### 实测
+
+```
+96 单测 / 85 项 Playwright 断言全绿
+按住 ▶ 320ms：矿工 x 120 → 145.3
+方向键 ← 320ms：145.3 → 121.3，松开 axis=0
+Esc / × / 点空处：三条退路逐一验证
+60Hz vs 120Hz 手动位移与指挥时长：完全一致
+```
+
+如实说一句边界：手动接管是**微操层，不是单刷按钮**。单个单位一路直冲仍会被敌方波次拦截，`tickFighter` 的「范围内有目标就先打人」保持原版口径；想赢还是得配合出兵。固守模式下把单位手动推过驻守线可以做单点骚扰，但不会凭空多出伤害。
 
 ## v2.9：宝石无限，难度降下来
 
@@ -72,7 +114,7 @@ UI：顶栏 `宝石 999`（窄屏隐藏文字、保留数值），底栏新增 `
 
 挂机仍会输，切「进攻」就能在一分钟左右赢——宝石不是把游戏改成无敌，而是让资源不再卡住操作。
 
-**验证**：82 个单测（新增 `gems.test.mjs` 14 项）、76 项 Playwright 断言（含顶栏宝石 / 连点 6 次全额生效 / 金币清零后按钮仍可点 / `paid` 实扣构成 / 取消原路退回）、素材与确定性静态自检、导航自检，全绿。历史章节里 v2.8 的 68/69 是当时的计数，未回改。
+**验证（v2.9 当时）**：82 个单测（新增 `gems.test.mjs` 14 项）、76 项 Playwright 断言（含顶栏宝石 / 连点 6 次全额生效 / 金币清零后按钮仍可点 / `paid` 实扣构成 / 取消原路退回）、素材与确定性静态自检、导航自检，全绿。历史章节的计数按当时口径保留，未回改。
 
 ## v2.8：手机能玩、矿要运、图要好看、对面会打波次
 
@@ -245,8 +287,9 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 | 无超时、无脏检查 | 软/硬两段超时、UI 数值脏检查、支持 DPR |
 | manifest 有 `png/jpg` 幽灵字段、体积口径不准 | `check-assets.mjs` 逐项校验字节数并解析 WebP 头校验画布尺寸：**289404 字节 / 282.6 KiB / 10 文件，10/10 通过** |
 | 全内联 onclick、字符串拼 handler | 统一 `addEventListener`，兵种栏/商店/升级由 `icons.js` 生成 `<img>`，工具按钮用内联 SVG |
-| 无配置、无测试、无 CI | 单一配置源 + **82 个单测** + GitHub Actions |
+| 无配置、无测试、无 CI | 单一配置源 + **96 个单测** + GitHub Actions |
 | 金币卡死、难度陡峭 | 宝石免费无限领 + `canAfford/pay` 统一抵扣 + 三档倍率与波次整体放缓、起始金币 200 |
+| 单位只能跟着 AI 自动跑，没有微操 | 点战场接管单兵，方向键/按住按钮走位，× / Esc / 点空处三条退路 |
 | 全战场只有一个黄圈当金矿 | 双侧各 3 个位图金矿插画，只挖自家半场；矿点远离雕像、背矿减速，一趟往返约 12 秒 |
 | 手机把整场压进一屏、影子发虚 | 固定 1600×800 逻辑世界 + 可拖动/跟随镜头 + DPR 画布 + 双层钳制柔影 |
 | 面板/浮层没有关闭叉号 | 商店、升级、暂停、结算四层都有 `×`，外加 `Esc` 分级后退、点遮罩、底部关闭按钮 |
@@ -257,7 +300,7 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 index.html                    页面骨架
 styles/main.css               暗色 HUD、面板层级 z-index 约定、位图/SVG 动画与暂停冻结
 assets/                       10 张 WebP + manifest.json
-config/game.json              ★ 唯一配置源（含 gems 宝石、world 视口、ai 波次/反制、assets 超时、animation、presentation）
+config/game.json              ★ 唯一配置源（含 control 单兵指挥、gems 宝石、world 视口、ai 波次/反制、assets 超时、animation、presentation）
 config/README.md              字段含义
 src/config.generated.js       生成物，必须提交
 src/config.js                 配置访问、ASSET_KEYS / 带版本指纹的 assetPath、升级维度与倍率派生
@@ -266,17 +309,17 @@ src/icons.js                  兵种位图 <img> 与工具按钮内联 SVG
 src/timing.js                 固定步长累加器
 src/rng.js                    可注入的确定性随机源
 src/state.js                  纯状态 / 单位工厂 / 训练队列 / 玩家+敌方双 Armory / AI 决策计时器 / fx
-src/simulation.js             纯逻辑：step / 训练 / AI 发育决策 / 指令 / 城堡射手 / 克制 / 升级
+src/simulation.js             纯逻辑：step / 训练 / AI 发育决策 / 波次 / 指令 / 单兵指挥 / 城堡射手 / 克制 / 宝石支付 / 升级
 src/render.js                 位图立绘 + 金矿插画 + HUD/粒子 + 镜头视口（resize/panBy/panStep/setFollow）
 src/ui.js                     DOM 绑定、面板、队列条、快捷键、镜头按钮与位图徽标
-src/main.js                   装配、主循环、拖动平移与镜头动作
+src/main.js                   装配、主循环、点击选中与拖动平移双阈值、镜头与指挥动作
 scripts/build-config.mjs      配置生成 + 结构校验
 scripts/stamp-cache.mjs       给 ESM 入口与所有相对 import 加 ?v=<version> 缓存指纹（幂等）
 scripts/check-assets.mjs      素材清单 / WebP 头 / 渲染确定性 / 缓存指纹静态自检
 scripts/check-navigation.mjs  退出通道静态自检
-scripts/smoke-pages.mjs       Playwright 可达性烟测（76 项）
+scripts/smoke-pages.mjs       Playwright 可达性烟测（85 项）
 scripts/serve.mjs             零依赖静态服务
-tests/                         node:test，82 个用例（8 个文件；含 world-waves.test.mjs / gems.test.mjs）
+tests/                         node:test，96 个用例（9 个文件；含 world-waves / gems / control.test.mjs）
 docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 .github/workflows/ci.yml       CI
 ```
@@ -288,8 +331,8 @@ docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 ```bash
 vim config/game.json
 npm run build              # 重新生成 src/config.generated.js
-npm run smoke              # 可选：本机 Chrome 跑 76 项可达性断言
-npm run check              # 生成 + 82 单测 + 素材/确定性静态自检
+npm run smoke              # 可选：本机 Chrome 跑 85 项可达性断言
+npm run check              # 生成 + 96 单测 + 素材/确定性静态自检
 ```
 
 `src/config.generated.js` 与所有带 `?v=` 指纹的 `src/*.js` / `index.html` 必须一起提交（Pages 直出静态文件）。**改 `meta.version` 后不跑 `npm run build` 会让线上继续吃旧缓存**——CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 守住一致性。加新兵种要同时补 `assets/<key>.webp` 与 `assets/manifest.json`，UI 与渲染会自动长出；改动画节奏只动 `animation` 段，改配色只动 `presentation` 段。
@@ -320,10 +363,10 @@ npm run check              # 生成 + 82 单测 + 素材/确定性静态自检
 「可达」= **每个能进的层都能出、每份资源都能取到、暂停时画面真的静止**：
 
 ```bash
-npm run smoke     # 需要本机 Chrome；自动起静态服务，76 项断言
+npm run smoke     # 需要本机 Chrome；自动起静态服务，85 项断言
 ```
 
-覆盖：首页 200、10 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、**逻辑世界 1600×800 / 窄屏只显示一段 / 镜头可平移 / Canvas 按 DPR 分配 / 矿点不贴回营点 / 金矿用位图插画 / `位图 10/10` 徽标 / 跟随开关 / 宽屏 resize 不改世界尺寸**、训练队列下单/退款、**顶栏宝石 / 连点 6 次免费领取全生效 / 金币清零后按钮仍可点 / `paid` 实扣构成 / 取消原路退回**、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
+覆盖：首页 200、10 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、**逻辑世界 1600×800 / 窄屏只显示一段 / 镜头可平移 / Canvas 按 DPR 分配 / 矿点不贴回营点 / 金矿用位图插画 / `位图 10/10` 徽标 / 跟随开关 / 宽屏 resize 不改世界尺寸**、训练队列下单/退款、**顶栏宝石 / 连点 6 次免费领取全生效 / 金币清零后按钮仍可点 / `paid` 实扣构成 / 取消原路退回**、**单兵指挥：选中 / 指挥条与兵种名 / 可见 × / 按住 ▶ 右移 / 方向键 ← 左移且松开归零 / Esc、×、点空处三条退路**、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
 
 CI 里跑 `scripts/check-navigation.mjs` 与 `scripts/check-assets.mjs` 做静态兜底（不需要浏览器）。
 
@@ -334,7 +377,7 @@ Pages 配置为 **legacy / `main` 分支 / 根目录**，push 到 `main` 自动�
 ## 已知限制
 
 - 升级在**训练下单时快照**，已出场单位不回溯加成
-- 没有单兵手动操控、战役地图/简报、存档、音效、多人
+- 单兵指挥是「接管一个单位」，没有多选框选、编队与路径点；也没有战役地图/简报、存档、音效、多人
 - Magikill 眩晕与召唤、Spearton 投矛、箭矢属性升级（火/毒/倒刺）尚未实现
 - AI 会按玩家兵种调权重、按波次进攻，但**不做目标选择、集火与撤退路径规划**
 - 仓库还没有 LICENSE

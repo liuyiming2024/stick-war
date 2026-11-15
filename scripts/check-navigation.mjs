@@ -26,6 +26,19 @@ if (!html.includes('rel="icon"')) problems.push('缺少内联 favicon（会触�
 for (const id of ['garrisonBtn', 'queueStrip', 'difficulty']) {
   if (!html.includes(`id="${id}"`)) problems.push(`缺少 v2.2 控件 ${id}`);
 }
+// v2.10：单兵指挥也是一个「能进的层」，必须有 × 与 Esc 两条退路。
+for (const id of ['championBar', 'champExit', 'champHoldLeft', 'champHoldRight', 'championName']) {
+  if (!html.includes(`id="${id}"`)) problems.push(`缺少 v2.10 指挥控件 ${id}`);
+}
+const champStart = html.indexOf('id="championBar"');
+const champBlock = champStart < 0 ? '' : html.slice(champStart, html.indexOf('</div>', champStart));
+if (!champBlock.includes('×')) problems.push('championBar 缺少可见的 × 退出');
+if (!ui.includes('champExit') || !ui.includes('releaseChampion')) {
+  problems.push('ui.js 未绑定指挥退出');
+}
+if (!ui.includes("k === 'ArrowLeft'") || !ui.includes("handleKeyUp")) {
+  problems.push('ui.js 缺少方向键按下/松开处理');
+}
 const css = await readFile(path.join(root, 'styles', 'main.css'), 'utf8');
 if (!css.includes('#queueStrip')) problems.push('样式缺少训练队列条');
 if (!css.includes('#panelBackdrop')) problems.push('样式缺少遮罩');
@@ -42,4 +55,4 @@ if (problems.length) {
   for (const p of problems) console.error('✗', p);
   process.exit(1);
 }
-console.log(`✓ 导航静态自检：${panels.length} 个面板 + 浮层 × + Esc 分级后退 + 遮罩 + 训练队列/难度/驻堡控件`);
+console.log(`✓ 导航静态自检：${panels.length} 个面板 + 浮层 × + 指挥条 × / 方向键 + Esc 分级后退 + 遮罩 + 训练队列/难度/驻堡控件`);

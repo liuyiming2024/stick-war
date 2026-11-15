@@ -1,4 +1,4 @@
-import { ASSET_KEYS, assetPath, CONFIG } from './config.js?v=2.9.0';
+import { ASSET_KEYS, assetPath, CONFIG } from './config.js?v=2.10.0';
 
 // 位图立绘回归（v2.5）：9 张 WebP（7 兵种 + 雕像 + 战场背景）。
 // 两段式超时：软超时只放行「可以开战」，不判失败；硬超时才记入缺失。

@@ -33,6 +33,17 @@ button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 .gemBtn:active{transform:scale(.94)}
 .camBtn{padding:7px 8px;letter-spacing:0}
 .camBtn[aria-pressed="true"]{opacity:1}
+#championBar{position:absolute;top:52px;left:8px;z-index:175;display:flex;align-items:center;gap:5px;
+  padding:5px 7px;border:1px solid #7a6438;border-radius:8px;
+  background:rgba(29,26,18,.94);box-shadow:0 3px 14px rgba(0,0,0,.35);color:#ffe0a0;font-size:12px}
+#championBar[hidden]{display:none}
+#championBar .champTitle{white-space:nowrap}
+#championBar .champTitle b{color:#fff0c8}
+.champHold,.champExit{padding:5px 8px;border:1px solid rgba(255,224,160,.35);border-radius:6px;
+  background:rgba(255,224,160,.08);color:#ffe0a0;font-size:12px;letter-spacing:0;touch-action:none}
+.champHold:active{background:rgba(255,224,160,.3)}
+.champExit{border-color:rgba(226,121,107,.55);color:#f0a89c;font-weight:600}
+.champExit:hover{background:rgba(226,121,107,.16)}
 #canvas{touch-action:none;cursor:grab}
 #canvas:active{cursor:grabbing}
 #topBar b{font-variant-numeric:tabular-nums}
@@ -147,5 +158,7 @@ body:not([data-phase="playing"]) .smallBtn[aria-pressed="true"]{animation-play-s
   #controlBtns{gap:3px;flex-wrap:wrap}
   .smallBtn{padding:6px 7px;font-size:12px}
   .camBtn{padding:6px 6px}
+  #championBar{top:auto;bottom:82px;left:8px;right:8px;justify-content:center;font-size:11px}
+  #championBar .champTitle{max-width:34vw;overflow:hidden;text-overflow:ellipsis}
 }
 @media (max-width:520px){#topBar .enemyDev{display:none}}

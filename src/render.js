@@ -5,7 +5,7 @@
 // 动画全部作用在位图的变换矩阵或矢量特效上，相位只来自
 // state.elapsed / unit.walkPhase / unit.anim / projectile.age / state.fx，
 // 不允许墙钟时间与随机源，因此暂停时画面完全静止、整局可复现。
-import { CONFIG } from './config.js?v=2.9.0';
+import { CONFIG } from './config.js?v=2.10.0';
 
 const C = CONFIG;
 const P = C.presentation;
@@ -566,6 +566,47 @@ export function createRenderer(canvas) {
     return out;
   }
 
+  // v2.10：被接管的单位脚下画一圈脉动环 + 头顶指示菱形。
+  // 属于功能性 HUD，不是实体插画；相位只取 state.elapsed，暂停即冻结。
+  function drawChampionRing(state) {
+    const id = state.control.championId;
+    if (id === null) return;
+    const u = state.units.find((v) => v.id === id && v.hp > 0);
+    if (!u) return;
+    const t = state.elapsed;
+    const h = state.h;
+    const gy = u.y ?? h * C.layout.groundRatio;
+    const pulse = 0.5 + 0.5 * Math.sin(t * A.crystalTwinkleHz * TAU);
+    const rx = h * 0.075;
+
+    ctx.save();
+    ctx.translate(u.x, gy + h * 0.012);
+    ctx.globalAlpha = 0.10 + 0.14 * pulse;
+    ctx.fillStyle = P.championGlow;
+    ctx.beginPath(); ctx.ellipse(0, 0, rx * 1.55, rx * 0.44, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.55 + 0.35 * pulse;
+    ctx.strokeStyle = P.champion;
+    ctx.lineWidth = Math.max(2, h * 0.004);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx * (1 + pulse * 0.08), rx * 0.24, 0, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+
+    const hy = gy - h * (C.layout.unitHeightRatio * 1.35);
+    const r = h * 0.018;
+    ctx.save();
+    ctx.globalAlpha = 0.65 + 0.35 * pulse;
+    ctx.fillStyle = P.champion;
+    ctx.beginPath();
+    ctx.moveTo(u.x, hy + r);
+    ctx.lineTo(u.x - r * 0.7, hy);
+    ctx.lineTo(u.x, hy - r);
+    ctx.lineTo(u.x + r * 0.7, hy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   function draw(state, assets) {
     updateCamera(state);
     const v = state.view;
@@ -586,6 +627,7 @@ export function createRenderer(canvas) {
     const offsets = visualOffsets(state, sorted);
     for (const u of sorted) drawUnit(state, assets, u, offsets);
     for (const p of state.projectiles) drawProjectile(state, p);
+    drawChampionRing(state);
   }
 
   return { resize, draw, panBy, panStep, setFollow };

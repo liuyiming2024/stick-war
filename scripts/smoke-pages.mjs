@@ -241,6 +241,75 @@ try {
   // 把金币恢复，避免影响后续「敌方发育」段的时长
   await page.evaluate(() => { window.__stickWar.state.gold = 500; });
 
+  // v2.10 单兵指挥：点战场选中 → 指挥条出现 → × / Esc / 点空处都能退
+  await page.locator('#unitBar .unitIcon').nth(0).click();  // 矿工，训练 4s
+  await page.waitForFunction(() =>
+    window.__stickWar.state.units.some((u) => u.team === 0 && u.hp > 0),
+    null, { timeout: 15000 });
+  const picked = await page.evaluate(() => {
+    const w = window.__stickWar;
+    const u = w.state.units.find((v) => v.team === 0 && v.hp > 0);
+    return { x: u.x, res: w.control.select(u.x) };
+  });
+  check('点战场可选中我方单位进入指挥', picked.res.ok === true, JSON.stringify(picked.res));
+  await page.waitForTimeout(60);
+  check('指挥条出现且显示兵种名', await page.isVisible('#championBar') &&
+    (await page.locator('#championName').innerText()).length > 0,
+    await page.locator('#championName').innerText());
+  check('指挥条有可见的 × 退出', await page.isVisible('#champExit') &&
+    (await page.locator('#champExit').innerText()).includes('×'));
+  check('指挥条有左右按住按钮',
+    await page.isVisible('#champHoldLeft') && await page.isVisible('#champHoldRight'));
+
+  const xBeforeHold = await page.evaluate(() =>
+    window.__stickWar.state.units.find((u) => u.team === 0 && u.hp > 0).x);
+  await page.locator('#champHoldRight').hover();
+  await page.mouse.down();
+  await page.waitForTimeout(320);
+  await page.mouse.up();
+  const xAfterHold = await page.evaluate(() =>
+    window.__stickWar.state.units.find((u) => u.team === 0 && u.hp > 0).x);
+  check('按住 ▶ 让指挥单位向右移动', xAfterHold > xBeforeHold + 1,
+    `${xBeforeHold.toFixed(1)} → ${xAfterHold.toFixed(1)}`);
+
+  const xBeforeKey = xAfterHold;
+  await page.keyboard.down('ArrowLeft');
+  await page.waitForTimeout(320);
+  await page.keyboard.up('ArrowLeft');
+  const xAfterKey = await page.evaluate(() => ({
+    x: window.__stickWar.state.units.find((u) => u.team === 0 && u.hp > 0).x,
+    axis: window.__stickWar.control.info().axis,
+  }));
+  check('方向键 ← 手动左移且松开后归零',
+    xAfterKey.x < xBeforeKey - 1 && xAfterKey.axis === 0,
+    `${xBeforeKey.toFixed(1)} → ${xAfterKey.x.toFixed(1)} axis=${xAfterKey.axis}`);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(60);
+  check('Esc 可退出指挥', !(await page.isVisible('#championBar')) &&
+    (await page.evaluate(() => window.__stickWar.control.info().active)) === false);
+
+  await page.evaluate(() => {
+    const w = window.__stickWar;
+    const u = w.state.units.find((v) => v.team === 0 && v.hp > 0);
+    w.control.select(u.x);
+  });
+  await page.waitForTimeout(60);
+  await page.click('#champExit');
+  await page.waitForTimeout(60);
+  check('指挥条 × 可退出', !(await page.isVisible('#championBar')) &&
+    (await page.evaluate(() => window.__stickWar.control.info().active)) === false);
+
+  await page.evaluate(() => {
+    const w = window.__stickWar;
+    const u = w.state.units.find((v) => v.team === 0 && v.hp > 0);
+    w.control.select(u.x);
+  });
+  await page.mouse.click(360, 190);   // 点战场空白处
+  await page.waitForTimeout(60);
+  check('点战场空白处也能退出指挥',
+    (await page.evaluate(() => window.__stickWar.control.info().active)) === false);
+
   // v2.7 敌方发育：开局先造矿工 → 真实往返运矿 → 自己花钱升科技，不是按周期刷兵
   // 等待期间 AI 会持续推线，先把雕像血量顶住，避免对局自动结束打断后续可达性断言。
   await page.evaluate(() => { window.__stickWar.state.homeHp = 1e9; });

@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#1e1e1e">
 <link rel="icon" href="data:,">
 <title>火柴人战争</title>
-<link rel="stylesheet" href="./styles/main.css?v=2.9.0">
+<link rel="stylesheet" href="./styles/main.css?v=2.10.0">
 </head>
 <body>
 
@@ -50,6 +50,14 @@
     <button class="smallBtn menuBtn2" id="menuBtn">菜单</button>
   </div>
 
+  <!-- v2.10 单兵指挥：点战场选中我方单位后出现；Esc / × / 点空处均可退出 -->
+  <div id="championBar" hidden aria-label="单兵指挥">
+    <span class="champTitle">指挥中 <b id="championName">—</b></span>
+    <button class="champHold" id="champHoldLeft" type="button" aria-label="按住向左移动">◀</button>
+    <button class="champHold" id="champHoldRight" type="button" aria-label="按住向右移动">▶</button>
+    <button class="champExit" id="champExit" type="button" aria-label="退出指挥" title="退出指挥（Esc）">× 退出</button>
+  </div>
+
   <!-- 训练队列：点条目可取消并全额退款 -->
   <div id="queueStrip" aria-label="训练队列"></div>
 
@@ -82,6 +90,6 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script type="module" src="./src/main.js?v=2.9.0"></script>
+<script type="module" src="./src/main.js?v=2.10.0"></script>
 </body>
 </html>
