@@ -5,7 +5,7 @@
 // 动画全部作用在位图的变换矩阵或矢量特效上，相位只来自
 // state.elapsed / unit.walkPhase / unit.anim / projectile.age / state.fx，
 // 不允许墙钟时间与随机源，因此暂停时画面完全静止、整局可复现。
-import { CONFIG } from './config.js?v=2.7.1';
+import { CONFIG } from './config.js?v=2.8.0';
 
 const C = CONFIG;
 const P = C.presentation;
@@ -101,17 +101,77 @@ function drawStickFigure(ctx, key, cx, groundY, hgt, color, swing) {
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
+  let lastElapsed = null;
 
+  /**
+   * v2.8：逻辑世界固定为 world.width × world.height（与 1600×800 背景 1:1）。
+   * 屏幕只负责「看哪一段」：scale 由可用高度决定，绝不把整场横向压进窄屏。
+   * 所有绘制仍用世界坐标，镜头只是 setTransform 的平移量。
+   */
   function resize(state) {
     const cw = canvas.clientWidth || window.innerWidth;
     const ch = canvas.clientHeight || Math.max(300, window.innerHeight - C.layout.canvasBottomReserve);
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
     canvas.width = Math.round(cw * dpr);
     canvas.height = Math.round(ch * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    state.w = cw;
-    state.h = ch;
-    for (const u of state.units) u.y = ch * C.layout.groundRatio;
+
+    state.w = C.world.width;
+    state.h = C.world.height;
+    for (const u of state.units) u.y = state.h * C.layout.groundRatio;
+
+    const v = state.view;
+    const prevX = v.x;
+    const prevFollow = v.follow;
+    const scale = Math.min(C.world.maxScale,
+      Math.max(C.world.minScale, ch / C.world.height));
+    const viewW = cw / scale;
+    const viewH = ch / scale;
+    const maxX = Math.max(0, C.world.width - viewW);
+    Object.assign(v, {
+      scale, viewW, viewH, cssW: cw, cssH: ch, dpr, maxX,
+      x: Math.min(maxX, Math.max(0, prevX)),
+      follow: prevFollow ?? true,
+      followAnchor: C.world.followAnchorRatio,
+      offsetY: Math.max(0, (ch - C.world.height * scale) / 2),
+    });
+    lastElapsed = null;
+  }
+
+  function clampX(v, x) { return Math.min(v.maxX, Math.max(0, x)); }
+
+  /** 镜头跟随玩家最前锋；只按模拟时间插值，暂停时画面完全静止。 */
+  function updateCamera(state) {
+    const v = state.view;
+    if (v.follow && state.phase === 'playing' && lastElapsed !== null) {
+      const dt = Math.max(0, state.elapsed - lastElapsed);
+      if (dt > 0) {
+        let front = -Infinity;
+        for (const u of state.units) {
+          if (u.team === 0 && u.hp > 0 && u.kind !== 'miner') front = Math.max(front, u.x);
+        }
+        if (!Number.isFinite(front)) front = state.w * C.layout.defendLineRatio;
+        const target = clampX(v, front - v.viewW * v.followAnchor);
+        const k = 1 - Math.exp(-C.world.followLerpPerSec * dt);
+        v.x = clampX(v, v.x + (target - v.x) * k);
+      }
+    }
+    lastElapsed = state.elapsed;
+  }
+
+  /** 拖动/按钮平移：dx 是 CSS 像素，换算回世界坐标。 */
+  function panBy(state, dxCss) {
+    const v = state.view;
+    v.x = clampX(v, v.x - dxCss / v.scale);
+    v.follow = false;
+  }
+  function panStep(state, dir) {
+    const v = state.view;
+    v.x = clampX(v, v.x + dir * v.viewW * C.world.panStepRatio);
+    v.follow = false;
+  }
+  function setFollow(state, on) {
+    state.view.follow = !!on;
+    if (on) lastElapsed = null;  // 不把「关闭跟随期间」的位移一次性补回来
   }
 
   // ── 背景：位图战场等比铺满 + 底部渐暗 + 确定性飘尘 ─────────────────────
@@ -230,83 +290,68 @@ export function createRenderer(canvas) {
     drawStatue(state, assets, state.w - C.layout.statueInset, 1);
   }
 
-  // ── 矿点标记（v2.6）：不再手画实体插画 ────────────────────────────────
-  // v2.3/v2.4 的岩块+晶簇被证明是「假装成一幅画」，越画越丑。这里只留一个
-  // 几何符号：地面短线 + 单个金色菱形 + 单条高光面 + 脉动光晕。它承担的是
-  // 「这里有个可挖的矿」的信息功能，不是美术表现；实体观感全部交给位图立绘。
-  function drawOrePile(state, x, y, hgt, index) {
+  // ── 矿点（v2.8）：真正的位图插画 ─────────────────────────────────────
+  // v2.3/v2.4 手写 Canvas 路径被证明不够精美，v2.6 退化成菱形符号也不够好。
+  // 现在统一用 assets/goldmine.webp（黑描边扁平插画：岩体 + 棱面金晶簇 + 星芒），
+  // 运行时只 drawImage；矢量仅剩「呼吸缩放 + 环绕金尘」这类动效，不再画实体。
+  function drawOrePile(state, assets, x, y, hgt, index) {
     const t = state.elapsed;
     const w = hgt * C.layout.goldMineWidthRatio;
     const glowPulse = 0.5 + 0.5 * Math.sin(t * A.mineGlowHz * TAU + index * 1.3);
     const twinkle = 0.5 + 0.5 * Math.sin(t * A.crystalTwinkleHz * TAU + index * 2.1);
-    const halfW = w * 0.17, halfH = hgt * 0.31;
-    const cy = -hgt * 0.42;
+    const img = assets.get('goldmine');
 
     ctx.save();
     ctx.translate(x, y);
 
-    ctx.fillStyle = P.mineShadow;
-    ctx.beginPath(); ctx.ellipse(0, 1, w * 0.30, hgt * 0.055, 0, 0, TAU); ctx.fill();
-
+    // 位图自带地面投影；这里只补一层随模拟时间呼吸的柔光
     ctx.save();
-    ctx.globalAlpha = 0.10 + 0.12 * glowPulse;
-    const glow = ctx.createRadialGradient(0, cy, hgt * 0.02, 0, cy, w * 0.48);
+    ctx.globalAlpha = 0.10 + 0.13 * glowPulse;
+    const glow = ctx.createRadialGradient(0, -hgt * 0.46, hgt * 0.02, 0, -hgt * 0.46, w * 0.62);
     glow.addColorStop(0, P.mineGlow);
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(0, cy, w * 0.48, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -hgt * 0.46, w * 0.62, 0, TAU); ctx.fill();
     ctx.restore();
 
-    // 地面基线：一条细线，不做石块堆叠
-    ctx.strokeStyle = rgba(P.goldColor, 0.34);
-    ctx.lineWidth = Math.max(1.2, hgt * 0.014);
-    ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(-w * 0.28, 0); ctx.lineTo(w * 0.28, 0); ctx.stroke();
-
-    // 单个菱形：两笔完成，不做刻线、不堆晶面
-    const breathe = 1 + twinkle * 0.045;
-    ctx.save();
-    ctx.translate(0, cy);
-    ctx.scale(breathe, breathe);
-    ctx.beginPath();
-    ctx.moveTo(0, -halfH); ctx.lineTo(halfW, 0);
-    ctx.lineTo(0, halfH); ctx.lineTo(-halfW, 0);
-    ctx.closePath();
-    ctx.fillStyle = P.goldColor; ctx.fill();
-    ctx.strokeStyle = P.goldDark; ctx.lineWidth = Math.max(1.2, hgt * 0.014); ctx.stroke();
-    // 唯一的高光面
-    ctx.beginPath();
-    ctx.moveTo(0, -halfH); ctx.lineTo(halfW, 0); ctx.lineTo(0, 0);
-    ctx.closePath();
-    ctx.fillStyle = rgba(P.goldLight, 0.72); ctx.fill();
-    ctx.restore();
-
-    // 顶部光点：闪烁强度取自 crystalTwinkleHz
-    ctx.save();
-    ctx.globalAlpha = 0.35 + twinkle * 0.55;
-    disc(ctx, 0, cy - halfH - hgt * 0.055, Math.max(1.6, hgt * 0.024), P.goldLight);
-    ctx.restore();
+    if (img) {
+      const d = srcDims(img);
+      const dw = w, dh = dw * (d.h / d.w);
+      const breathe = 1 + twinkle * 0.018;
+      ctx.save();
+      ctx.translate(0, 2);
+      ctx.scale(breathe, breathe);
+      ctx.drawImage(img, -dw / 2, -dh + hgt * 0.04, dw, dh);
+      ctx.restore();
+    } else {
+      // 素材未到达时的降级标记（不是常态美术）
+      ctx.strokeStyle = rgba(P.goldColor, 0.34);
+      ctx.lineWidth = Math.max(1.2, hgt * 0.014);
+      ctx.beginPath(); ctx.moveTo(-w * 0.28, 0); ctx.lineTo(w * 0.28, 0); ctx.stroke();
+      poly(ctx, [[0, -hgt * 0.34], [w * 0.17, 0], [0, hgt * 0.34], [-w * 0.17, 0]],
+        P.goldColor, P.goldDark, Math.max(1.2, hgt * 0.014));
+    }
 
     // 环绕金尘：确定性相位，数量取 trailDots
     for (let k = 0; k < A.trailDots; k++) {
       const ph = t * A.crystalTwinkleHz * TAU * 0.5 + k * 1.9 + index;
       ctx.save();
       ctx.globalAlpha = 0.16 + 0.40 * (0.5 + 0.5 * Math.sin(ph));
-      const px = Math.cos(ph) * w * 0.30;
-      const py = cy + Math.sin(ph) * halfH * 0.85;
+      const px = Math.cos(ph) * w * 0.34;
+      const py = -hgt * 0.42 + Math.sin(ph) * hgt * 0.30;
       disc(ctx, px, py, Math.max(1, hgt * 0.013), P.goldLight);
       ctx.restore();
     }
     ctx.restore();
   }
 
-  function drawMines(state) {
+  function drawMines(state, assets) {
     const h = state.h, y = h * C.layout.goldMineYRatio;
     const hgt = h * C.layout.goldMineHeightRatio;
     const t = state.elapsed;
     for (let i = 0; i < C.layout.goldMines.length; i++) {
       const x = state.w * C.layout.goldMines[i].xRatio;
-      drawOrePile(state, x, y, hgt, i);
+      drawOrePile(state, assets, x, y, hgt, i);
       const workers = state.units.filter((u) =>
         u.kind === 'miner' && u.hp > 0 && u.mineIndex === i && u.job === 'mining').length;
       if (workers) {
@@ -364,12 +409,17 @@ export function createRenderer(canvas) {
     const bob = Math.abs(Math.sin(u.walkPhase)) * A.bobRatio * h * (u.moving ? 1 : 0) +
       carryBob + breath;
 
-    // 地面投影
+    // 地面投影：半径必须钳制下限。bob 可能为负（呼吸/背矿下沉），
+    // 旧写法 0.20 - bob/h*0.4 会算出过大甚至反向的椭圆，在窄屏高 DPR 下发虚。
+    // 双层柔影 + 固定世界坐标绘制，缩放下边缘依然干净。
+    const shRx = Math.max(h * 0.09, Math.min(h * 0.26, h * 0.20 - bob * 0.4));
+    const shRy = Math.max(h * 0.018, h * 0.040);
     ctx.save();
+    ctx.globalAlpha = 0.45;
     ctx.fillStyle = P.shadow;
-    ctx.beginPath();
-    ctx.ellipse(cx, gy - 1, h * (0.20 - bob / h * 0.4), h * 0.042, 0, 0, TAU);
-    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx, gy - 1, shRx * 1.22, shRy * 1.5, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.ellipse(cx, gy - 1, shRx, shRy, 0, 0, TAU); ctx.fill();
     ctx.restore();
 
     const src = assets.team(u.type, u.team) ?? assets.get(u.type);
@@ -517,11 +567,20 @@ export function createRenderer(canvas) {
   }
 
   function draw(state, assets) {
-    ctx.clearRect(0, 0, state.w, state.h);
+    updateCamera(state);
+    const v = state.view;
+    const s = v.scale * v.dpr;
+    // 先按设备像素清整块画布，再切到「世界坐标 → 屏幕」的镜头变换。
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.setTransform(s, 0, 0, s, -v.x * s, v.offsetY * v.dpr);
+
     drawBackground(state, assets);
     drawFort(state);
     drawStatues(state, assets);
-    drawMines(state);
+    drawMines(state, assets);
     drawGoldBurst(state);
     const sorted = [...state.units].sort((a, b) => a.x - b.x);
     const offsets = visualOffsets(state, sorted);
@@ -529,5 +588,5 @@ export function createRenderer(canvas) {
     for (const p of state.projectiles) drawProjectile(state, p);
   }
 
-  return { resize, draw };
+  return { resize, draw, panBy, panStep, setFollow };
 }

@@ -101,9 +101,10 @@ test('雕像受击与金币交付触发矢量动画反馈', () => {
   const miner = spawnUnit(m, 'miner', 0, null);
   miner.job = 'toHome';
   miner.carry = C.economy.goldPerTrip;
-  miner.x = C.layout.statueInset + C.layout.statueHitRadius + 1;
+  miner.x = C.layout.statueInset + C.layout.statueHitRadius;  // 精确落在回营点
   step(m, 1 / 60, createRng(2));
   assert.ok(m.fx.goldBurst > 0, '交付金币应有迸发动画');
+  assert.equal(m.stats.trips, 1, 'v2.8 负重减速不应吞掉交付');
 });
 
 test('驻堡时全军回堡且不追击，驻堡状态由逻辑层标记', () => {

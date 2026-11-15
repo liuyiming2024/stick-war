@@ -43,6 +43,6 @@ jobs:
           test -f .nojekyll
           test -f src/main.js
           test -f assets/manifest.json
-          test "$(ls assets/*.webp | wc -l)" -eq 9
+          test "$(ls assets/*.webp | wc -l)" -eq 10
           grep -q 'type="module"' index.html
           grep -q '?v=' index.html

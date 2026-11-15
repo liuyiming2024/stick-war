@@ -75,6 +75,39 @@ if (!(cfg.economy.castleGoldPerSec > 0 && cfg.match.fortArcherPerUnits > 0)) {
 if (!(cfg.assets?.softTimeoutSec > 0 && cfg.assets?.hardTimeoutSec > cfg.assets.softTimeoutSec)) {
   throw new Error('assets 软/硬超时配置不合理');
 }
+if (!(cfg.assets.retryCount >= 0 && cfg.assets.retryDelayMs > 0)) {
+  throw new Error('assets 重试配置不合理');
+}
+// v2.8：逻辑世界固定宽高，窄屏靠视口/镜头，而不是把战场压缩进一个屏幕。
+const world = cfg.world;
+for (const k of ['width', 'height', 'minScale', 'maxScale', 'followAnchorRatio',
+  'followLerpPerSec', 'panStepRatio', 'mobileFollowWidth']) {
+  if (!(world?.[k] > 0)) throw new Error(`world.${k} 必须为正数`);
+}
+if (!(world.minScale <= world.maxScale)) throw new Error('world.minScale 不能大于 maxScale');
+if (!(world.followAnchorRatio > 0 && world.followAnchorRatio < 1)) {
+  throw new Error('world.followAnchorRatio 必须在 (0,1)');
+}
+// 矿点不能贴着回营点：否则矿工「挖到就回营」，运矿过程消失。
+const minDist = cfg.economy.minMineHomeDistanceRatio;
+if (!(minDist > 0)) throw new Error('economy.minMineHomeDistanceRatio 必须为正数');
+if (!(cfg.economy.carrySpeedMul > 0 && cfg.economy.carrySpeedMul <= 1)) {
+  throw new Error('economy.carrySpeedMul 必须落在 (0,1]');
+}
+const homeL = cfg.layout.statueInset + cfg.layout.statueHitRadius;
+const homeR = world.width - homeL;
+for (const [i, m] of cfg.layout.goldMines.entries()) {
+  const x = world.width * m.xRatio;
+  const home = m.side === 0 ? homeL : homeR;
+  const dist = Math.abs(x - home);
+  if (dist < world.width * minDist) {
+    throw new Error(
+      `goldMines[${i}] 距回营点仅 ${dist.toFixed(0)}px，低于 ${(world.width * minDist).toFixed(0)}px：挖到就回营，运矿过程会消失`);
+  }
+  if ((m.side === 0 && x >= world.width * 0.5) || (m.side === 1 && x <= world.width * 0.5)) {
+    throw new Error(`goldMines[${i}] 越过中线，会挖到对方半场`);
+  }
+}
 // v2.7：AI 必须真的发育——按顺序买矿工/科技，而不是按定时器凭空刷兵。
 const growth = cfg.ai;
 for (const key of ['decisionIntervalSec', 'rampSec', 'minerTargetStart', 'minerTargetEnd',
@@ -100,6 +133,27 @@ for (const [i, entry] of growth.upgradePlan.entries()) {
 }
 if (!(cfg.economy.aiStartGold > 0 && cfg.economy.aiGoldPerSec >= 0)) {
   throw new Error('economy.aiStartGold / aiGoldPerSec 配置不合理');
+}
+// v2.8：波次指挥与针对性反制。反制矩阵必须是 [aiType, playerType, mul>0] 三元组。
+if (!(growth.counterSaturation > 0)) throw new Error('ai.counterSaturation 必须为正');
+if (!Array.isArray(growth.counterMatrix) || growth.counterMatrix.length === 0) {
+  throw new Error('ai.counterMatrix 必须是非空数组');
+}
+for (const [i, row] of growth.counterMatrix.entries()) {
+  if (!Array.isArray(row) || row.length !== 3) throw new Error(`ai.counterMatrix[${i}] 必须是三元组`);
+  const [a, p, mul] = row;
+  if (!cfg.units[a] || !cfg.units[p]) throw new Error(`ai.counterMatrix[${i}] 含未知兵种: ${a}/${p}`);
+  if (!(mul > 0)) throw new Error(`ai.counterMatrix[${i}] 倍率必须为正`);
+  if (a === p) throw new Error(`ai.counterMatrix[${i}] 不能自我克制`);
+}
+const wave = growth.wave;
+for (const key of ['firstWaveSize', 'waveSizeGrowth', 'maxWaveSize', 'buildMinSec',
+  'launchRatio', 'musterTimeoutSec', 'assaultTimeoutSec', 'retreatRatio', 'regroupSec']) {
+  if (!(wave?.[key] > 0)) throw new Error(`ai.wave.${key} 必须为正数`);
+}
+if (!(wave.firstWaveSize <= wave.maxWaveSize)) throw new Error('ai.wave.firstWaveSize 不能超过 maxWaveSize');
+if (!(wave.launchRatio <= 1 && wave.retreatRatio < wave.launchRatio)) {
+  throw new Error('ai.wave.launchRatio / retreatRatio 关系不合理（必须 retreat < launch <= 1）');
 }
 
 const header = [

@@ -62,14 +62,14 @@ try {
   const resp = await page.goto(base, { waitUntil: 'networkidle', timeout: 30000 });
   check('首页可达', resp?.status() === 200, `HTTP ${resp?.status()}`);
 
-  // 位图回归：两段式超时放行后即可开战，9 张 WebP 必须全部取到
+  // 位图回归：两段式超时放行后即可开战，10 张 WebP（含金矿插画）必须全部取到
   await page.waitForFunction(() => !document.getElementById('startBtn').disabled, null, { timeout: 25000 });
   check('位图加载完成后开始按钮可用', true);
 
   const staticOk = failedRequests.length === 0;
   check('所有静态资源（HTML/CSS/JS/WebP）无 4xx/5xx', staticOk, failedRequests.join(' | ') || '全部 200');
   const webpUrls = new Set(allRequests.filter((u) => /\.webp(?:\?|$)/i.test(u)));
-  check('9 张 WebP 立绘/背景均已请求', webpUrls.size === 9, `${webpUrls.size} 个不同 URL`);
+  check('10 张 WebP 立绘/背景/金矿均已请求', webpUrls.size === 10, `${webpUrls.size} 个不同 URL`);
   const missingAssets = await page.evaluate(() => window.__stickWar.assets.missingCount());
   check('素材缺失数为 0（无隐形单位）', missingAssets === 0, `${missingAssets} 张缺失`);
   check('无运行时异常', consoleErrors.length === 0, consoleErrors.join(' | ') || '无');
@@ -107,6 +107,65 @@ try {
   await page.click('#startBtn');
   check('主菜单 → 对局', await page.isVisible('#gameUI') && !(await page.isVisible('#mainMenu')));
   check('难度选择已生效', (await page.evaluate(() => window.__stickWar.state.difficulty)) === 'hard');
+
+  // v2.8 移动端视口：逻辑世界固定 1600×800，390px 窄屏只显示其中一段，不压缩整场
+  const viewport = await page.evaluate(() => {
+    const w = window.__stickWar;
+    const s = w.state, v = s.view, c = document.getElementById('canvas');
+    const homeL = w.config.layout.statueInset + w.config.layout.statueHitRadius;
+    const homeR = s.w - homeL;
+    const dists = w.config.layout.goldMines.map((m) =>
+      Math.abs(s.w * m.xRatio - (m.side === 0 ? homeL : homeR)));
+    return {
+      worldW: s.w, worldH: s.h, viewW: v.viewW, scale: v.scale, maxX: v.maxX,
+      dpr: v.dpr, canvasW: c.width, cssW: v.cssW,
+      follow: v.follow,
+      minDist: Math.min(...dists),
+      required: s.w * w.config.economy.minMineHomeDistanceRatio,
+      goldmine: !!w.assets.get('goldmine'),
+      assets: w.assets.count(),
+      badge: document.getElementById('assetBadge').textContent,
+      badgeOk: document.getElementById('assetBadge').classList.contains('ok'),
+    };
+  });
+  check('逻辑世界固定为 1600×800', viewport.worldW === 1600 && viewport.worldH === 800,
+    `${viewport.worldW}×${viewport.worldH}`);
+  check('窄屏只显示一段战场而非压扁整场', viewport.viewW < viewport.worldW * 0.6,
+    `视口 ${viewport.viewW.toFixed(0)} / 世界 ${viewport.worldW}`);
+  check('镜头可横向平移', viewport.maxX > 0, `maxX=${viewport.maxX.toFixed(0)}`);
+  check('Canvas 按 DPR 分配设备像素', viewport.canvasW === Math.round(viewport.cssW * viewport.dpr),
+    `${viewport.canvasW} vs ${viewport.cssW}×${viewport.dpr}`);
+  check('矿点不再贴着回营点', viewport.minDist >= viewport.required,
+    `最近 ${viewport.minDist.toFixed(0)}px ≥ ${viewport.required.toFixed(0)}px`);
+  check('金矿使用真正的位图插画', viewport.goldmine);
+  check('10 张位图全部登记且徽标可见', viewport.assets === 10 &&
+    viewport.badge === '位图 10/10' && viewport.badgeOk, `${viewport.badge} / ${viewport.assets}`);
+  check('窄屏默认开启镜头跟随', viewport.follow === true);
+
+  await page.click('#camRight');
+  const panned = await page.evaluate(() => ({
+    x: window.__stickWar.state.view.x,
+    follow: window.__stickWar.state.view.follow,
+  }));
+  check('视角右移按钮生效且关闭跟随', panned.x > 0 && panned.follow === false,
+    `x=${panned.x.toFixed(0)}`);
+  await page.click('#camFollow');
+  check('跟随按钮可重新开启', (await page.evaluate(() =>
+    window.__stickWar.state.view.follow)) === true);
+
+  // 桌面宽屏：视口应能看到接近完整战场，且 resize 不改写逻辑世界尺寸
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(120);
+  const wide = await page.evaluate(() => {
+    const s = window.__stickWar.state, c = document.getElementById('canvas');
+    return { w: s.w, viewW: s.view.viewW, canvasW: c.width, cssW: s.view.cssW };
+  });
+  check('宽屏 resize 后逻辑世界尺寸不变', wide.w === 1600, `w=${wide.w}`);
+  check('宽屏视野接近完整战场', wide.viewW > 1600 * 0.85,
+    `视口 ${wide.viewW.toFixed(0)}px`);
+  check('宽屏 Canvas 同步重算 DPR', wide.canvasW === Math.round(wide.cssW * viewport.dpr));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(120);
 
   // 训练队列：下单扣钱入队、点条目取消退款、不生成幽灵单位
   const goldBefore = await page.evaluate(() => window.__stickWar.state.gold);

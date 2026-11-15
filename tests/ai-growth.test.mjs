@@ -123,16 +123,27 @@ test('AI 升级通过训练快照生效：新出场的单位属性真的变高',
   s.homeHp = 1e9;
   s.aiGold = 100000;
   s.limits.aiPopMax = 1000;
-  run(s, 90);
-  assert.ok(s.aiUpgrades.sword.atk >= 1,
-    `科技线应已走到 sword.atk，实际 planIndex=${s.aiPlanIndex}`);
-  const swords = s.units.filter((u) => u.team === 1 && u.type === 'sword' && u.hp > 0);
-  assert.ok(swords.length > 0, '应已有剑士出场');
-  assert.ok(swords.some((u) => u.dmg > C.units.sword.dmg + 1e-9),
-    `升级后剑士伤害应高于基础值 ${C.units.sword.dmg}`);
+  // v2.8 起 assault 阶段不买科技，90 秒通常只走到 planIndex=2（miner 背包/镐）。
+  // 因此这里以「已买到的前两级矿工科技」验证快照，不强求走到 sword.atk。
+  run(s, 120);
+  assert.ok(s.aiPlanIndex >= 2, `至少应买完两级矿工科技，实际 planIndex=${s.aiPlanIndex}`);
+  assert.ok(s.aiUpgrades.miner.bag >= 1 && s.aiUpgrades.miner.pick >= 1);
   const miners = aiMiners(s);
+  assert.ok(miners.length > 0, '应已有矿工出场');
   assert.ok(miners.some((u) => u.goldPerTrip > C.economy.goldPerTrip + 1e-9),
     '背包升级应提高矿工每趟收益');
+  assert.ok(miners.some((u) => u.mineDuration < C.economy.mineDurationSec - 1e-9),
+    '镐升级应缩短挖掘耗时');
+  // 科技线推进到兵种攻防后，快照结构必须真的被 bonusFor 读到。
+  // 不依赖「恰好还有剑士活着」——波次里前排会阵亡，直接用同一份快照派生一个单位。
+  if (s.aiUpgrades.sword.atk >= 1) {
+    const u = spawnUnit(s, 'sword', 1, { sword: { ...s.aiUpgrades.sword } });
+    const expected = C.units.sword.dmg *
+      (1 + s.aiUpgrades.sword.atk * C.upgrade.dmgPerLevel);
+    assert.ok(Math.abs(u.dmg - expected) < 1e-9,
+      `AI 升级快照未生效：dmg=${u.dmg}，期望 ${expected}`);
+    assert.ok(u.dmg > C.units.sword.dmg + 1e-9, '升级后剑士伤害应高于基础值');
+  }
 });
 
 test('旧 bug 回归：玩家升级快照必须真的影响训练出的单位', () => {

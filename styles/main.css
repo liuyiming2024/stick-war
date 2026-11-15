@@ -23,6 +23,12 @@ button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 #topBar .home{color:#79d4b0}#topBar .enemy{color:#e2796b}#topBar .clock{color:#7c8b90}
 #topBar .enemyDev{color:#c9a86a;font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
 #topBar .enemyDev b{color:#e8c98a}
+#topBar .assetBadge{color:#8fb8c4;font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+#topBar .assetBadge.ok{color:#79d4b0}#topBar .assetBadge.bad{color:#e2796b}
+.camBtn{padding:7px 8px;letter-spacing:0}
+.camBtn[aria-pressed="true"]{opacity:1}
+#canvas{touch-action:none;cursor:grab}
+#canvas:active{cursor:grabbing}
 #topBar b{font-variant-numeric:tabular-nums}
 #canvas{width:100%;height:calc(100% - 120px);display:block;background:#141f2b}
 #bottomBar{height:76px;background:linear-gradient(180deg,#151d20,#0e1518);display:flex;align-items:center;padding:6px 8px;gap:6px;overflow-x:auto;border-top:1px solid #2a373b;scrollbar-width:thin}
@@ -126,4 +132,14 @@ body:not([data-phase="playing"]) .smallBtn[aria-pressed="true"]{animation-play-s
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes cardIn{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
 
-@media (max-width:420px){#topBar{font-size:11px;padding:0 6px}#topBar .clock,#topBar .enemyDev{display:none}.unitIcon,.toolBtn{width:58px;height:60px}.panelClose{width:34px;height:34px;top:6px;right:6px}}
+@media (max-width:420px){
+  #topBar{font-size:11px;padding:0 6px;gap:4px}
+  #topBar .clock,#topBar .enemyDev{display:none}
+  #topBar .assetBadge{font-size:10px}
+  .unitIcon,.toolBtn{width:58px;height:60px}
+  .panelClose{width:34px;height:34px;top:6px;right:6px}
+  #controlBtns{gap:3px;flex-wrap:wrap}
+  .smallBtn{padding:6px 7px;font-size:12px}
+  .camBtn{padding:6px 6px}
+}
+@media (max-width:520px){#topBar .enemyDev{display:none}}

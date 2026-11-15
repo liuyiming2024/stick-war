@@ -24,21 +24,21 @@ src/render.js    src/ui.js
  特效与全部动画
    ▲
    │
-src/assets.js    9 张 WebP 加载 / 两段式超时 / 染色与闪白预生成
+src/assets.js    10 张 WebP 加载 / 两段式超时 / 染色与闪白预生成
 ```
 
 `src/main.js` 只做装配：创建 state / rng / assets / renderer / ui，用 `src/timing.js` 的固定步长累加器驱动 `step`，每帧调一次 `renderer.draw(state, assets)` 和 `ui.sync()`。素材加载完成后才 `enableStart()`；软超时（6s）先放行开战，硬超时（20s）才把没到的图记入缺失。
 
-**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 57 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
+**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 68 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
 
 ## 渲染：位图立绘 + 矢量特效（v2.5）
 
-v2.3/v2.4 两次自绘矢量观感不达标，v2.5 从仓库历史恢复原始 9 张 WebP 并回退美术方案。现在：
+v2.3/v2.4 两次自绘矢量观感不达标，v2.5 从仓库历史恢复原始 9 张 WebP 并回退美术方案（v2.8 再补第 10 张 `goldmine.webp` 并增强全部立绘）。现在：
 
 | 文件 | 职责 |
 | --- | --- |
-| `src/assets.js` | 加载 9 张 WebP；两段式超时；加载时一次性生成 `team:0` / `team:1` 染色版与纯白 `flash` 剪影 |
-| `src/render.js` | `drawImage` 画单位/雕像/背景；Canvas 只画**几何标记与功能性 HUD**：菱形矿点、细线拖尾、血条、进度环、攻击弧、堡区护罩、粒子 |
+| `src/assets.js` | 加载 10 张 WebP；两段式超时 + `onerror` 单次重试（换 URL 绕开被缓存的失败响应）；加载时一次性生成 `team:0` / `team:1` 染色版与纯白 `flash` 剪影 |
+| `src/render.js` | `drawImage` 画单位/雕像/背景/**金矿插画**；Canvas 只画**功能性 HUD 与粒子**：细线拖尾、血条、进度环、攻击弧、堡区护罩、金尘、金币迸发。另负责固定世界 → 屏幕的镜头变换（`resize` / `panBy` / `panStep` / `setFollow`） |
 | `src/icons.js` | 兵种栏/商店/升级用 `<img class="unitBmp">`；工具按钮仍是内联 SVG |
 
 v2.6 把矢量从「美术」降级为「信息」：删掉岩块晶簇矿堆、箭杆/箭头/石块/法球造型、皮革背矿袋，只留单个金色菱形矿标、分段细线拖尾、同源菱形背矿浮标，以及血条/进度环/攻击弧/护罩虚线/粒子等 HUD。理由是 v2.3、v2.4 两次手写路径都没达到「够精美」；不要在 `render.js` 里重新堆多边形假装插画，需要精美矿点形象应补一张同风格 WebP。
@@ -102,7 +102,7 @@ v2.6 把矢量从「美术」降级为「信息」：删掉岩块晶簇矿堆、
 
 层级（低 → 高）：`canvas/背景 0` → `panelBackdrop 140` → `面板 150` → `controlBtns 160` → `queueStrip 165` → `topBar / bottomBar 170` → `pauseOverlay 180` → `mainMenu 200` → `toast 300`。控制条放在战场右上角（`top:52px`），避免与面板底部关闭按钮抢点击区域。
 
-每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处同样能退。`check-navigation.mjs` 静态守结构，`smoke-pages.mjs` 跑 56 项交互断言。
+每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处同样能退。`check-navigation.mjs` 静态守结构，`smoke-pages.mjs` 跑 69 项交互断言。
 
 ## 配置怎么做到的
 
@@ -134,10 +134,32 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 | `tests/mechanics.test.mjs` | 训练队列/退款/升级快照/人口、三指令与驻堡、城堡射手、克制倍率、被动收入、矿工 Armory、难度 |
 | `tests/vector.test.mjs` | 位图图标引用、工具 SVG 自包含、无墙钟相位、步态只在移动时累加、fx 递减与暂停冻结、驻堡免疫 |
 | `tests/ai-growth.test.mjs` | 开局先补矿工、矿工目标与人口上限、真实运矿交付与自家半场、难度收益倍率、独立 Armory 与升级快照生效、60/120Hz 一致、重开清空 |
-| `scripts/check-assets.mjs` | 9 张 WebP 存在 / 字节数 / WebP 头尺寸、素材键与配置一致、零墙钟/随机/filter、animation 被真实消费、Pages 入口 |
-| `scripts/smoke-pages.mjs` | 56 项可达性（含 9 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**暂停画面静止 / 恢复后继续动画**） |
+| `scripts/check-assets.mjs` | 10 张 WebP 存在 / 字节数 / WebP 头尺寸、素材键与配置一致、零墙钟/随机/filter、animation 被真实消费、Pages 入口 |
+| `tests/world-waves.test.mjs` | 固定世界与窄屏视口、矿距/中线、负重减速、克制权重与饱和、波次阶段流转/波容/帧率一致/重开 |
+| `scripts/smoke-pages.mjs` | 69 项可达性（含 10 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头按钮/宽屏 resize**、暂停画面静止 / 恢复后继续动画） |
 
-CI 另做全模块语法检查、配置漂移、导航静态自检、Pages 入口（含 `test -f assets/manifest.json` 与 `assets/*.webp` 数量 = 9）。Playwright 烟测需要本机 Chrome，CI 不跑（用静态自检兜底）。
+CI 另做全模块语法检查、配置漂移、导航静态自检、Pages 入口（含 `test -f assets/manifest.json` 与 `assets/*.webp` 数量 = 10）。Playwright 烟测需要本机 Chrome，CI 不跑（用静态自检兜底）。
+
+## 固定世界与镜头（v2.8）
+
+**逻辑世界恒为 `world.width × world.height` = 1600×800**，与 `battlefield.webp` 1:1。`createState()` 默认就是这个尺寸；`renderer.resize()` 绝不改写 `state.w/h`，只重算 `state.view`：
+
+```
+scale = clamp(cssH / 800, minScale, maxScale)
+viewW = cssW / scale
+maxX  = max(0, 1600 - viewW)
+setTransform(scale*dpr, 0, 0, scale*dpr, -view.x*scale*dpr, offsetY*dpr)
+```
+
+所有 `drawXxx()` 继续用世界坐标，镜头只是变换矩阵，物理与判定完全不变。`view.x` 由三种方式驱动：canvas 上 pointer 拖动（`panBy` 把 CSS 像素换算回世界像素）、`◀/▶` 按钮（`panStep` 步进 0.35 个视口宽）、跟随开关（默认取我方最前锋 `front - viewW*followAnchor`，按 `state.elapsed` 差值做 `1-exp(-k*dt)` 指数插值）。拖动与步进都会关掉跟随；`setFollow(true)` 会把 `lastElapsed` 置空，避免把「关闭期间」的位移一次性补回来。暂停时 `elapsed` 不推进，镜头与所有动画一起冻结。
+
+`dpr` 上限 3，`imageSmoothingQuality='high'`；`offsetY` 处理超宽屏时世界高度小于视口高度的垂直居中。单位地面投影半径钳制在 `[0.09h, 0.26h]` 并画两层，避免 bob 为负时算出反向椭圆。
+
+**运矿距离**：`goldMines` 的 `xRatio` 外移到 `0.26…0.42` / `0.58…0.74`，`build-config.mjs` 静态拒绝「距回营点 < `world.width * economy.minMineHomeDistanceRatio`」或越过中线的配置。`tickMiner()` 把 `u.speed` 换成局部 `speed = u.speed * (carry>0 ? carrySpeedMul : 1)`，背矿这一段真的会慢下来。
+
+**素材可靠性**：`assetPath()` 产出 `./assets/<key>.webp?v=<meta.version>`，素材 URL 与 ESM 依赖图共用同一个版本指纹；`assets.js` 的 `onerror` 会换 `&retry=N` 重试一次，软/硬超时在整次 `loadOne` 生命周期里只挂一次（重试不重置），硬超时后才到达的图片仍会补登记。顶栏 `位图 N/10` 徽标由 `refreshLoadTip()` 同步。
+
+**AI 波次**：`state.aiPhase` 走 `build → muster → assault → regroup`，`updateAiPhase()` 在每个决策 tick 开头流转，`aiDecide()` 据此决定这一个动作（补矿工 / 升科技 / 出兵）。只有 `muster` 会出兵，攒到 `waveSize`（4 起，每波 +1，上限 9）就停手；`assault` 阶段 `aiGoalLine()` 才把目标设成玩家雕像，其余阶段守 `1 - defendLineRatio`。`aiCounterWeight()` 按玩家兵种构成抬权重，`counterSaturation` 做饱和。全部状态在 `resetMatch()` 里清空。
 
 ## 版本化缓存（v2.7.1）
 

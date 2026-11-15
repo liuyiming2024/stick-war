@@ -1,7 +1,7 @@
-import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.7.1';
-import { unitIconHTML, toolSVG } from './icons.js?v=2.7.1';
-import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.7.1';
-import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo } from './simulation.js?v=2.7.1';
+import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.8.0';
+import { unitIconHTML, toolSVG } from './icons.js?v=2.8.0';
+import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.8.0';
+import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo } from './simulation.js?v=2.8.0';
 
 const C = CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -18,6 +18,8 @@ export function createUI(state, actions) {
     closeShopX: $('closeShopX'), closeUpgradeX: $('closeUpgradeX'),
     attackBtn: $('attackBtn'), defendBtn: $('defendBtn'), garrisonBtn: $('garrisonBtn'),
     pauseBtn: $('pauseBtn'), difficulty: $('difficulty'), queueStrip: $('queueStrip'),
+    camLeft: $('camLeft'), camRight: $('camRight'), camFollow: $('camFollow'),
+    assetBadge: $('assetBadge'),
     overlay: $('pauseOverlay'), toastEl: $('toast'),
   };
   const unitButtons = new Map();
@@ -185,6 +187,7 @@ export function createUI(state, actions) {
     syncQueue();
     el.pauseBtn.setAttribute('aria-pressed', String(state.phase === 'paused'));
     el.pauseBtn.textContent = state.phase === 'paused' ? '继续' : '暂停';
+    el.camFollow.setAttribute('aria-pressed', String(!!state.view.follow));
     for (const { key, stat, node } of upgradeButtons) {
       const disabled = !playable || state.gold < C.upgrade.cost ||
         upgradeLevels(state, key)[stat] >= C.upgrade.maxLevel;
@@ -316,6 +319,9 @@ export function createUI(state, actions) {
     el.attackBtn.addEventListener('click', () => mode('attack'));
     el.defendBtn.addEventListener('click', () => mode('defend'));
     el.garrisonBtn.addEventListener('click', () => mode('garrison'));
+    el.camLeft.addEventListener('click', () => actions.pan(-1));
+    el.camRight.addEventListener('click', () => actions.pan(1));
+    el.camFollow.addEventListener('click', () => actions.toggleFollow());
     $('shopBtn').addEventListener('click', () => openPanel('shop'));
     $('upgradeBtn').addEventListener('click', () => openPanel('upgrade'));
     // 每个面板都有两条退路：底部文字按钮 + 右上角 ×
@@ -338,6 +344,13 @@ export function createUI(state, actions) {
   return {
     sync, toast, showMenu, showGame, showPause, showEnd, refreshUpgrade,
     setLoadTip: (text) => { el.loadTip.textContent = text; },
+    setAssetBadge: (loaded, total, missing) => {
+      const node = el.assetBadge;
+      const text = `位图 ${loaded}/${total}`;
+      if (node.textContent !== text) node.textContent = text;
+      node.classList.toggle('ok', missing === 0);
+      node.classList.toggle('bad', missing > 0);
+    },
     enableStart: () => { el.startBtn.disabled = false; },
   };
 }

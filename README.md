@@ -1,7 +1,7 @@
-# 火柴人战争（网页版 v2.7.1）
+# 火柴人战争（网页版 v2.8.0）
 
 > 从「一个 18KB 的 `index.html` 包办一切」重构成模块化、可配置、可测试、可继续迭代的静态游戏。
-> v2.5 位图立绘回归 → v2.6 矢量降级为 HUD → **v2.7：敌方也要发育**。AI 不再按定时器凭空刷兵，而是自己训练矿工、真实往返运矿、用 `upgradePlan` 花钱升科技，攒够预算才出兵；难度差异来自经济倍率与训练速度，而不是出兵间隔。
+> v2.7 敌方发育 → v2.7.1 ESM 缓存指纹 → **v2.8：移动端视口 + 真正运矿 + 位图金矿 + 波次指挥**。窄屏不再把整场压扁，改为固定 1600×800 逻辑世界 + 可拖动/可跟随的镜头；矿点挪离雕像并给矿工加负重减速；补一张金矿插画、增强全部立绘；AI 攒够一波再进攻，并针对玩家兵种调整出兵。
 
 [![CI](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml/badge.svg)](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml)
 
@@ -20,7 +20,48 @@ npm run serve          # http://localhost:4173/
 python3 -m http.server 4173
 ```
 
-无运行时构建步骤，改完刷新即可；只有改 `config/game.json` 才需要 `npm run build` 重新生成 `src/config.generated.js`。9 张 WebP 合计 **129816 字节 / 126.8 KiB**，两段式超时放行后即可开战，弱网下晚到的图片会补登记。
+无运行时构建步骤，改完刷新即可；只有改 `config/game.json` 才需要 `npm run build` 重新生成 `src/config.generated.js` 与 ESM 版本指纹。10 张 WebP 合计 **289404 字节 / 282.6 KiB**，两段式超时（9s / 26s）+ 单次失败重试放行后即可开战，弱网下晚到的图片会补登记；顶栏 `位图 10/10` 徽标可随时核验。
+
+## v2.8：手机能玩、矿要运、图要好看、对面会打波次
+
+### 固定逻辑世界 + 镜头视口
+
+旧实现把 `canvas.clientWidth` 直接写成 `state.w`，390px 手机上整个 1600px 战场被压进一屏，单位只剩几像素高、影子发虚、矿点和雕像挤在一起。
+
+现在逻辑世界**恒为 `world.width × world.height` = 1600×800**（与背景位图 1:1），屏幕只决定「看哪一段」：
+
+- `scale = clamp(ch / 800, minScale, maxScale)`，`viewW = cssW / scale`；390×844 下约看到 431 世界像素，单位屏幕高度约 112px。
+- 所有绘制仍用世界坐标，镜头只是 `setTransform(scale*dpr, …, -view.x*scale*dpr, offsetY*dpr)`，不改任何物理量。
+- `view.x` 支持**拖动战场**、`◀ / ▶` 按钮步进、以及「跟随」开关（默认跟随我方最前锋，按 `state.elapsed` 做指数插值，暂停时完全静止）。resize 只重算视口，绝不改写 `state.w/h`。
+- Canvas 按 `devicePixelRatio`（上限 3）分配设备像素，`imageSmoothingQuality='high'`。
+- 单位地面投影改成双层柔影，半径钳制在 `[0.09h, 0.26h]`——旧写法 `0.20 - bob/h*0.4` 在 bob 为负时会算出过大甚至反向椭圆，高 DPR 下发虚。
+
+### 挖到矿要走一段路才回营
+
+矿点从 `xRatio 0.14/0.22/0.30`（贴着雕像）外移到 `0.26/0.34/0.42` 与 `0.58/0.66/0.74`，最近单程 ≥ `world.width × minMineHomeDistanceRatio = 192px`（实际约 282px），且 `build-config.mjs` 静态拒绝任何贴脸或越过中线的配置。矿工背矿时移速 ×`carrySpeedMul=0.72`，一趟「去 → 挖 1.6s → 回」约 11.8 秒，运矿过程看得见。
+
+### 位图：补金矿插画 + 全部立绘增强
+
+v2.3/v2.4 手写路径、v2.6 菱形符号都没达到「够精美」。这轮不等第三版画风，直接给 `assets/goldmine.webp`（360×300，黑描边扁平插画：三层岩体 + 棱面金晶簇 + 星芒高光 + 柔和金光），渲染层只 `drawImage` + 呼吸缩放/环绕金尘，矢量降级路径仅作素材未到达时的替身。
+
+7 张兵种 + 雕像统一 2× Lanczos 超采样、UnsharpMask 轻微锐化、alpha 外扩做暗色墨边，高 DPR 下不再糊。`assets/` 共 **10 张 WebP / 289404 字节**，`manifest.json` 与 `check-assets.mjs` 逐项校验（10/10）。
+
+之前线上抓取器显示「9 张素材缺失、线稿替身」是环境误报；这次额外做了三件事：素材 URL 带 `?v=<version>` 指纹（避免缓存住一次失败响应）、`onerror` 单次重试（换 URL 绕开被缓存的失败）、顶栏 `位图 10/10` 实时徽标。烟测里 10 张全部 200、`missingCount=0`。
+
+### 对面改成波次指挥 + 针对性反制
+
+`aiPhase` 状态机 `build → muster → assault → regroup`：
+
+| 阶段 | 行为 |
+| --- | --- |
+| `build` | 只补矿工/买科技，`buildMinSec=12` 内不出战斗兵 |
+| `muster` | 逐个下单直到「已出场 + 排队」达到 `waveSize`，实际出场到 `launchRatio=0.75` 才发起进攻 |
+| `assault` | 不再出兵，整波一起压到玩家雕像；打残到 `retreatRatio` 或超时即重整 |
+| `regroup` | 补矿工/买科技，冷却后开下一波，波容从 4 递增到上限 9 |
+
+非 `assault` 阶段 AI 战斗兵守在自家半场（`1 - defendLineRatio`），不再零敲碎打地往前送。`counterMatrix` 按玩家兵种构成抬权重（堆剑士 → 弓箭手 ×2.2；堆远程 → 矛士/巨人），用 `counterSaturation` 做饱和上限防止一边倒。120 秒推演：普通难度约 3 波、12 个战斗兵、3 级科技。
+
+**验证**：68 个单测（新增 `world-waves.test.mjs` 11 项）、69 项 Playwright 断言（含窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头平移与跟随/宽屏 resize）、素材与确定性静态自检、导航自检，全绿。
 
 ## v2.7.1：修掉「线上还停在旧版本」
 
@@ -90,7 +131,7 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 
 `animation` 段 18/23 键仍被渲染层消费，相位约束、暂停冻结、`visualOffsets()` 全部不变。
 
-**这一步不是「精美矢量」**。想要矿点变成真正好看的插画，唯一稳妥路径是给一张与现有白色线稿同风格的 `assets/goldmine.webp`（更新 `manifest.json` 与 `check-assets.mjs` 断言即可），我不会再自作主张生成图片。
+**这一步不是「精美矢量」**，只是把实体观感先交回位图。矿点真正变成插画是在 v2.8 补的 `assets/goldmine.webp`（见上文），并同步更新了 `manifest.json` 与 `check-assets.mjs` 断言。
 
 ## v2.5：位图立绘回归
 
@@ -150,10 +191,11 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 | 每帧 `ctx.filter` 闪白 | 加载时预生成白色剪影，运行时只 `drawImage` |
 | 素材缺失文案说替代绘制、实际隐形 | 两段式超时 + `onerror` 真降级线稿替身，弱网晚到补登记 |
 | 无超时、无脏检查 | 软/硬两段超时、UI 数值脏检查、支持 DPR |
-| manifest 有 `png/jpg` 幽灵字段、体积口径不准 | `check-assets.mjs` 逐项校验字节数并解析 WebP 头校验画布尺寸：**129816 字节 / 126.8 KiB / 9 文件，9/9 通过** |
+| manifest 有 `png/jpg` 幽灵字段、体积口径不准 | `check-assets.mjs` 逐项校验字节数并解析 WebP 头校验画布尺寸：**289404 字节 / 282.6 KiB / 10 文件，10/10 通过** |
 | 全内联 onclick、字符串拼 handler | 统一 `addEventListener`，兵种栏/商店/升级由 `icons.js` 生成 `<img>`，工具按钮用内联 SVG |
-| 无配置、无测试、无 CI | 单一配置源 + **57 个单测** + GitHub Actions |
-| 全战场只有一个黄圈当金矿 | 双侧各 3 个矢量矿石堆，只挖自家半场 |
+| 无配置、无测试、无 CI | 单一配置源 + **68 个单测** + GitHub Actions |
+| 全战场只有一个黄圈当金矿 | 双侧各 3 个位图金矿插画，只挖自家半场；矿点远离雕像、背矿减速，一趟往返约 12 秒 |
+| 手机把整场压进一屏、影子发虚 | 固定 1600×800 逻辑世界 + 可拖动/跟随镜头 + DPR 画布 + 双层钳制柔影 |
 | 面板/浮层没有关闭叉号 | 商店、升级、暂停、结算四层都有 `×`，外加 `Esc` 分级后退、点遮罩、底部关闭按钮 |
 
 ## 目录结构
@@ -161,27 +203,27 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 ```
 index.html                    页面骨架
 styles/main.css               暗色 HUD、面板层级 z-index 约定、位图/SVG 动画与暂停冻结
-assets/                       9 张 WebP + manifest.json
-config/game.json              ★ 唯一配置源（含 ai 发育计划、assets 超时、animation、presentation）
+assets/                       10 张 WebP + manifest.json
+config/game.json              ★ 唯一配置源（含 world 视口、ai 波次/反制、assets 超时、animation、presentation）
 config/README.md              字段含义
 src/config.generated.js       生成物，必须提交
-src/config.js                 配置访问、ASSET_KEYS / assetPath、升级维度与倍率派生
-src/assets.js                 位图加载、两段式超时、阵营染色与闪白剪影预生成
+src/config.js                 配置访问、ASSET_KEYS / 带版本指纹的 assetPath、升级维度与倍率派生
+src/assets.js                 位图加载、两段式超时 + 单次重试、阵营染色与闪白剪影预生成
 src/icons.js                  兵种位图 <img> 与工具按钮内联 SVG
 src/timing.js                 固定步长累加器
 src/rng.js                    可注入的确定性随机源
 src/state.js                  纯状态 / 单位工厂 / 训练队列 / 玩家+敌方双 Armory / AI 决策计时器 / fx
 src/simulation.js             纯逻辑：step / 训练 / AI 发育决策 / 指令 / 城堡射手 / 克制 / 升级
-src/render.js                 位图立绘绘制 + 几何标记/HUD + 全部场景动画（不含实体插画）
-src/ui.js                     DOM 绑定、面板、队列条、快捷键
-src/main.js                   装配与主循环
+src/render.js                 位图立绘 + 金矿插画 + HUD/粒子 + 镜头视口（resize/panBy/panStep/setFollow）
+src/ui.js                     DOM 绑定、面板、队列条、快捷键、镜头按钮与位图徽标
+src/main.js                   装配、主循环、拖动平移与镜头动作
 scripts/build-config.mjs      配置生成 + 结构校验
 scripts/stamp-cache.mjs       给 ESM 入口与所有相对 import 加 ?v=<version> 缓存指纹（幂等）
 scripts/check-assets.mjs      素材清单 / WebP 头 / 渲染确定性 / 缓存指纹静态自检
 scripts/check-navigation.mjs  退出通道静态自检
-scripts/smoke-pages.mjs       Playwright 可达性烟测（56 项）
+scripts/smoke-pages.mjs       Playwright 可达性烟测（69 项）
 scripts/serve.mjs             零依赖静态服务
-tests/                         node:test，57 个用例（6 个文件）
+tests/                         node:test，68 个用例（7 个文件；含 world-waves.test.mjs）
 docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 .github/workflows/ci.yml       CI
 ```
@@ -193,8 +235,8 @@ docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 ```bash
 vim config/game.json
 npm run build              # 重新生成 src/config.generated.js
-npm run smoke              # 可选：本机 Chrome 跑 56 项可达性断言
-npm run check              # 生成 + 57 单测 + 素材/确定性静态自检
+npm run smoke              # 可选：本机 Chrome 跑 69 项可达性断言
+npm run check              # 生成 + 68 单测 + 素材/确定性静态自检
 ```
 
 `src/config.generated.js` 与所有带 `?v=` 指纹的 `src/*.js` / `index.html` 必须一起提交（Pages 直出静态文件）。**改 `meta.version` 后不跑 `npm run build` 会让线上继续吃旧缓存**——CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 守住一致性。加新兵种要同时补 `assets/<key>.webp` 与 `assets/manifest.json`，UI 与渲染会自动长出；改动画节奏只动 `animation` 段，改配色只动 `presentation` 段。
@@ -225,10 +267,10 @@ npm run check              # 生成 + 57 单测 + 素材/确定性静态自检
 「可达」= **每个能进的层都能出、每份资源都能取到、暂停时画面真的静止**：
 
 ```bash
-npm run smoke     # 需要本机 Chrome；自动起静态服务，56 项断言
+npm run smoke     # 需要本机 Chrome；自动起静态服务，69 项断言
 ```
 
-覆盖：首页 200、9 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、训练队列下单/退款、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
+覆盖：首页 200、10 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、**逻辑世界 1600×800 / 窄屏只显示一段 / 镜头可平移 / Canvas 按 DPR 分配 / 矿点不贴回营点 / 金矿用位图插画 / `位图 10/10` 徽标 / 跟随开关 / 宽屏 resize 不改世界尺寸**、训练队列下单/退款、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
 
 CI 里跑 `scripts/check-navigation.mjs` 与 `scripts/check-assets.mjs` 做静态兜底（不需要浏览器）。
 
@@ -241,10 +283,11 @@ Pages 配置为 **legacy / `main` 分支 / 根目录**，push 到 `main` 自动�
 - 升级在**训练下单时快照**，已出场单位不回溯加成
 - 没有单兵手动操控、战役地图/简报、存档、音效、多人
 - Magikill 眩晕与召唤、Spearton 投矛、箭矢属性升级（火/毒/倒刺）尚未实现
-- AI 只有一套节奏曲线，不根据玩家兵种做针对性反制
+- AI 会按玩家兵种调权重、按波次进攻，但**不做目标选择、集火与撤退路径规划**
 - 仓库还没有 LICENSE
 - 单位只有一维 x 轴，没有纵深、碰撞体积与寻路
 - 位图立绘是静态单帧，动画靠变换矩阵与矢量特效叠加，没有逐帧序列帧
-- 矿点是金色菱形几何符号而非插画；要换成精美形象需补一张同风格 WebP
+- 镜头在极窄屏（<360px）下左右可平移范围变小，但未做双指缩放
+- 首次从「无指纹的旧 HTML」升级仍需硬刷新一次（见 v2.7.1）
 
 以上留作后续迭代入口。

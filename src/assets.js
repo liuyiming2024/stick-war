@@ -1,4 +1,4 @@
-import { ASSET_KEYS, assetPath, CONFIG } from './config.js?v=2.7.1';
+import { ASSET_KEYS, assetPath, CONFIG } from './config.js?v=2.8.0';
 
 // 位图立绘回归（v2.5）：9 张 WebP（7 兵种 + 雕像 + 战场背景）。
 // 两段式超时：软超时只放行「可以开战」，不判失败；硬超时才记入缺失。
@@ -41,12 +41,14 @@ export function createAssets({ softTimeoutMs = 6000, hardTimeoutMs = 20000, onCh
 
   function loadOne(key) {
     return new Promise((resolve) => {
-      const img = new Image();
+      const maxAttempts = Math.max(1, (CONFIG.assets.retryCount ?? 0) + 1);
+      let attempt = 0;
       let reported = false;
       let registered = false;
+      let img = null;
 
       const doRegister = () => {
-        if (registered || !img.naturalWidth) return;
+        if (registered || !img?.naturalWidth) return;
         registered = true;
         missing.delete(key);
         register(key, img);
@@ -58,6 +60,7 @@ export function createAssets({ softTimeoutMs = 6000, hardTimeoutMs = 20000, onCh
         resolve({ key, ok, reason, done, total });
       };
 
+      // 软/硬超时在整次 loadOne 的生命周期里只挂一次，重试不重置。
       const soft = setTimeout(() => report(true, 'slow'), softTimeoutMs);
       const hard = setTimeout(() => {
         if (!registered) { missing.add(key); onChange?.(); }
@@ -65,20 +68,31 @@ export function createAssets({ softTimeoutMs = 6000, hardTimeoutMs = 20000, onCh
         report(false, 'timeout');
       }, hardTimeoutMs);
 
-      img.onload = () => {
-        doRegister();
-        clearTimeout(soft);
-        clearTimeout(hard);
-        report(true, 'ok');
+      const start = () => {
+        img = new Image();
+        img.decoding = 'async';
+        img.onload = () => {
+          doRegister();                 // 硬超时之后才到达也照样补登记
+          clearTimeout(soft);
+          clearTimeout(hard);
+          report(true, 'ok');
+        };
+        img.onerror = () => {
+          if (attempt + 1 < maxAttempts) {
+            attempt++;
+            // 换一个 URL 绕开被缓存的失败响应
+            setTimeout(start, CONFIG.assets.retryDelayMs);
+            return;
+          }
+          clearTimeout(soft);
+          clearTimeout(hard);
+          missing.add(key);
+          onChange?.();
+          report(false, 'error');
+        };
+        img.src = attempt === 0 ? assetPath(key) : `${assetPath(key)}&retry=${attempt}`;
       };
-      img.onerror = () => {
-        clearTimeout(soft);
-        clearTimeout(hard);
-        missing.add(key);
-        onChange?.();
-        report(false, 'error');
-      };
-      img.src = assetPath(key);
+      start();
     });
   }
 

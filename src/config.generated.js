@@ -3,8 +3,19 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.7.1",
-    "subtitle": "位图立绘 · 敌方经济发育"
+    "version": "2.8.0",
+    "subtitle": "位图立绘 · 敌方波次指挥与反制"
+  },
+  "world": {
+    "width": 1600,
+    "height": 800,
+    "minScale": 0.5,
+    "maxScale": 0.95,
+    "followAnchorRatio": 0.42,
+    "followLerpPerSec": 6,
+    "panStepRatio": 0.35,
+    "mobileFollowWidth": 760,
+    "_note": "逻辑世界固定 1600x800；窄屏只显示其中一段并允许拖动/跟随，不把整场压进一个屏幕"
   },
   "layout": {
     "statueInset": 74,
@@ -13,27 +24,27 @@ export default Object.freeze({
     "groundRatio": 0.76,
     "goldMines": [
       {
-        "xRatio": 0.14,
+        "xRatio": 0.26,
         "side": 0
       },
       {
-        "xRatio": 0.22,
+        "xRatio": 0.34,
         "side": 0
       },
       {
-        "xRatio": 0.3,
+        "xRatio": 0.42,
         "side": 0
       },
       {
-        "xRatio": 0.7,
+        "xRatio": 0.58,
         "side": 1
       },
       {
-        "xRatio": 0.78,
+        "xRatio": 0.66,
         "side": 1
       },
       {
-        "xRatio": 0.86,
+        "xRatio": 0.74,
         "side": 1
       }
     ],
@@ -86,6 +97,8 @@ export default Object.freeze({
     "goldPerTrip": 6,
     "mineDurationSec": 1.6,
     "mineArriveEps": 8,
+    "carrySpeedMul": 0.72,
+    "minMineHomeDistanceRatio": 0.12,
     "aiStartGold": 120,
     "aiGoldPerSec": 1.5,
     "castleGoldPerSec": 1,
@@ -125,6 +138,55 @@ export default Object.freeze({
     "militaryReserveGold": 25,
     "upgradeIntervalSec": 13,
     "upgradeReserveGold": 20,
+    "counterSaturation": 3,
+    "counterMatrix": [
+      [
+        "archer",
+        "sword",
+        2.2
+      ],
+      [
+        "spear",
+        "archer",
+        1.8
+      ],
+      [
+        "spear",
+        "stone",
+        1.8
+      ],
+      [
+        "giant",
+        "archer",
+        1.6
+      ],
+      [
+        "giant",
+        "wizard",
+        1.6
+      ],
+      [
+        "sword",
+        "archer",
+        1.3
+      ],
+      [
+        "sword",
+        "wizard",
+        1.3
+      ]
+    ],
+    "wave": {
+      "firstWaveSize": 4,
+      "waveSizeGrowth": 1,
+      "maxWaveSize": 9,
+      "buildMinSec": 12,
+      "launchRatio": 0.75,
+      "musterTimeoutSec": 34,
+      "assaultTimeoutSec": 32,
+      "retreatRatio": 0.3,
+      "regroupSec": 7
+    },
     "upgradePlan": [
       [
         "miner",
@@ -299,8 +361,10 @@ export default Object.freeze({
     }
   },
   "assets": {
-    "softTimeoutSec": 6,
-    "hardTimeoutSec": 20
+    "softTimeoutSec": 9,
+    "hardTimeoutSec": 26,
+    "retryCount": 1,
+    "retryDelayMs": 400
   },
   "animation": {
     "walkHz": 1.8,

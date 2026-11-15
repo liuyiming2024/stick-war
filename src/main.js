@@ -1,11 +1,11 @@
-import { CONFIG } from './config.js?v=2.7.1';
-import { createState, resetMatch } from './state.js?v=2.7.1';
-import { createRng } from './rng.js?v=2.7.1';
-import { step, minePositions, setDifficulty, aiGrowthInfo } from './simulation.js?v=2.7.1';
-import { createAssets } from './assets.js?v=2.7.1';
-import { createRenderer } from './render.js?v=2.7.1';
-import { createUI } from './ui.js?v=2.7.1';
-import { createFixedStepDriver } from './timing.js?v=2.7.1';
+import { CONFIG, ASSET_KEYS } from './config.js?v=2.8.0';
+import { createState, resetMatch } from './state.js?v=2.8.0';
+import { createRng } from './rng.js?v=2.8.0';
+import { step, minePositions, setDifficulty, aiGrowthInfo } from './simulation.js?v=2.8.0';
+import { createAssets } from './assets.js?v=2.8.0';
+import { createRenderer } from './render.js?v=2.8.0';
+import { createUI } from './ui.js?v=2.8.0';
+import { createFixedStepDriver } from './timing.js?v=2.8.0';
 
 const canvas = document.getElementById('canvas');
 const state = createState();
@@ -18,6 +18,7 @@ let started = false;
 function refreshLoadTip() {
   const n = assets.missingCount();
   ui.setLoadTip(n ? `${n} 张素材缺失，已启用线稿替身` : '位图素材就绪，可以开战');
+  ui.setAssetBadge(assets.count(), ASSET_KEYS.length, n);
 }
 
 // 弱网下软超时先放行开战，图片晚到再补登记，不误判成「素材缺失」。
@@ -40,9 +41,12 @@ const ui = createUI(state, {
     state.phase = 'playing';
     ui.showGame();
     renderer.resize(state);
+    state.view.follow = state.view.cssW < CONFIG.world.mobileFollowWidth;
     driver.reset();
     last = performance.now();
   },
+  pan(dir) { renderer.panStep(state, dir); },
+  toggleFollow() { renderer.setFollow(state, !state.view.follow); },
   goMenu() {
     state.phase = 'menu';
     ui.showMenu();
@@ -74,6 +78,23 @@ function frame(now) {
 
 function onResize() {
   renderer.resize(state);
+}
+
+// 窄屏横向拖动战场；拖动会暂时关掉自动跟随，点「跟随」可再打开。
+let dragX = null;
+canvas.addEventListener('pointerdown', (e) => {
+  if (state.phase !== 'playing') return;
+  dragX = e.clientX;
+  try { canvas.setPointerCapture(e.pointerId); } catch { /* 非指针设备忽略 */ }
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (dragX === null) return;
+  const dx = e.clientX - dragX;
+  dragX = e.clientX;
+  if (dx) renderer.panBy(state, dx);
+});
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  canvas.addEventListener(ev, () => { dragX = null; });
 }
 
 window.addEventListener('resize', onResize);

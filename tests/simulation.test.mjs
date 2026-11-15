@@ -196,21 +196,24 @@ test('目标在飞行中死亡时投射物落空，不误伤旁边单位', () =>
   assert.equal(e2.hp, hp2, '死目标的箭不应转移给旁边的单位');
 });
 
-test('AI 兵种按解锁时间开放，且开局先发育再出兵', () => {
+test('AI 兵种按解锁时间开放，且发育期结束才按波次出兵', () => {
   const s = playing();
   s.aiGold = 1e6;
   s.homeHp = 1e9;
   s.limits.aiPopMax = 1000;
   run(s, 10, 1 / 60, 3);
-  const fighters = s.units.filter((u) => u.team === 1 && u.kind !== 'miner').map((u) => u.type);
-  assert.ok(fighters.length >= 1, 'AI 应该出过战斗兵');
-  assert.ok(fighters.every((t) => ['sword', 'spear', 'archer'].includes(t)),
-    `10 秒内不该出现未解锁兵种: ${fighters}`);
+  assert.equal(s.aiPhase, 'build', '10 秒应仍在发育期');
+  assert.equal(s.units.filter((u) => u.team === 1 && u.kind !== 'miner').length, 0,
+    'buildMinSec 之前不该出战斗兵');
   assert.ok(s.stats.aiMinersTrained >= C.ai.minerTargetStart,
     `开局应先补矿工，实际只训练了 ${s.stats.aiMinersTrained} 个`);
   run(s, 50, 1 / 60, 3);
-  assert.ok(s.stats.aiSpawned >= 10,
-    `60 秒内应已持续出兵 ${s.stats.aiSpawned} 次`);
+  const fighters = s.units.filter((u) => u.team === 1 && u.kind !== 'miner').map((u) => u.type);
+  assert.ok(fighters.every((t) => ['sword', 'spear', 'archer'].includes(t)),
+    `不该出现未解锁兵种: ${fighters}`);
+  assert.ok(s.stats.aiSpawned >= 4,
+    `60 秒内应已集结出兵 ${s.stats.aiSpawned} 次`);
+  assert.ok(s.stats.aiWaves >= 1, '应至少发起过一次进攻波次');
 });
 
 test('对局统计随模拟累加，重开后归零', () => {

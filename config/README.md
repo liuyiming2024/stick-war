@@ -4,35 +4,36 @@
 
 ```bash
 npm run build     # 重新生成 src/config.generated.js + 结构校验
-npm run check     # 生成 + 57 个单测 + 素材/渲染确定性静态自检
-npm run smoke     # 可选：56 项页面可达性断言
+npm run check     # 生成 + 68 个单测 + 素材/渲染确定性静态自检
+npm run smoke     # 可选：69 项页面可达性断言
 ```
 
 `src/config.generated.js` 必须一起提交（Pages 从 `main` 直出，运行时不跑构建）。CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 校验漂移。
 
 **`meta.version` 同时是 ESM 缓存指纹**：`scripts/stamp-cache.mjs` 会给 `index.html` 的 module script / stylesheet 与 `src/*.js` 的所有相对 import 追加 `?v=<version>`。改版本号后**必须** `npm run build`，否则浏览器会继续用旧 URL 的缓存模块（现象是线上停在旧版本，甚至因导出不匹配白屏）。`check-assets.mjs` 会静态校验 19 条 import 的指纹全等于当前版本。
 
-`scripts/build-config.mjs` 同时承担结构校验：必填段、单位字段、`trainSec > 0`、难度三档、`damageMatrix` 四个倍率、矿点分布、`assets` 软/硬超时、`animation` 全部参数为正、`presentation` 调色板齐全。
+`scripts/build-config.mjs` 同时承担结构校验：必填段、单位字段、`trainSec > 0`、难度三档、`damageMatrix` 四个倍率、**世界尺寸与缩放上下限**、**每个矿点距回营点的距离不得小于 `minMineHomeDistanceRatio × world.width` 且不得越过中线**、`counterMatrix` 三元组合法、波次参数比例关系、`assets` 软/硬超时与重试、`animation` 全部参数为正、`presentation` 调色板齐全。
 
 ## 各段含义
 
 | 段 | 作用 |
 | --- | --- |
-| `meta` | 标题与版本号（菜单展示，格式 `x.y.z`） |
+| `meta` | 标题与版本号（菜单展示，格式 `x.y.z`；同时是 ESM 与素材 URL 的缓存指纹） |
+| `world` | **v2.8**：固定逻辑世界 `width/height`、镜头缩放 `minScale/maxScale`、跟随锚点 `followAnchorRatio`、插值速度 `followLerpPerSec`、按钮步进 `panStepRatio`、窄屏默认跟随阈值 `mobileFollowWidth` |
 | `layout` | 雕像位置与判定半径、地面线、驻守线、`fortInsetRatio`、`goldMines` 矿点数组、矿堆绘制比例、单位尺寸比例 |
 | `match` | 初始金币、雕像血量、人口上限、固定步长、雕像伤害倍率、`fortArcher*` 城堡射手、`difficulties` 三档难度 |
-| `economy` | 矿工每趟收益、挖掘耗时、AI 收入、`castleGoldPerSec` 被动收入、`bagPerLevel` / `pickaxePerLevel` |
+| `economy` | 矿工每趟收益、挖掘耗时、AI 收入、`castleGoldPerSec` 被动收入、`bagPerLevel` / `pickaxePerLevel`；**v2.8** `carrySpeedMul` 背矿减速、`minMineHomeDistanceRatio` 矿点距回营点最短比例 |
 | `upgrade` | 升级单价、等级上限、攻/防/速每级增益、`speedPerLevel` 移速增益与下限 |
 | `combat` | 推挤、受击闪白、投射物参数、`damageMatrix` 克制倍率 |
-| `ai` | v2.7 发育决策：`decisionIntervalSec` 决策 tick、`rampSec` 矿工目标爬坡、`minerTargetStart/End` 与三个 `ReserveGold` 预算、`upgradeIntervalSec` 科技节流、`upgradePlan` 升级序列（先矿工经济再兵种攻防） |
+| `ai` | v2.7 发育决策：`decisionIntervalSec`、`rampSec`、`minerTargetStart/End` 与三个 `ReserveGold`、`upgradeIntervalSec`、`upgradePlan`；**v2.8** `counterMatrix` / `counterSaturation` 克制权重、`wave`（首波/增长/上限/集结/进攻/重整时长与比例） |
 | `units` | 7 个兵种全部数值；`trainSec`、`aiUnlockSec`、`aiWeight`、`projectile`、`kind` |
-| `assets` | 位图加载 `softTimeoutSec` / `hardTimeoutSec`，弱网软超时先放行开战、硬超时才记缺失 |
+| `assets` | 位图加载 `softTimeoutSec` / `hardTimeoutSec`，弱网软超时先放行开战、硬超时才记缺失；`retryCount` / `retryDelayMs` 控制失败重试 |
 | `animation` | 全部动画参数：步态/呼吸/挥击/挖掘/背矿/晶簇/雕像/拖尾等，见下 |
 | `presentation` | 调色板：矢量特效层、血条、粒子、暗色 HUD 与阵营色 |
 
 ## assets：位图素材
 
-`assets/` 下 9 张 WebP（7 兵种 + `statue` + `battlefield`），键由 `src/config.js` 的 `ASSET_KEYS` 定义，路径由 `assetPath()` 生成。`assets/manifest.json` 登记每个文件的画布尺寸与字节数，`scripts/check-assets.mjs` 逐项校验并解析 RIFF/WebP 头。
+`assets/` 下 10 张 WebP（7 兵种 + `statue` + `battlefield` + `goldmine` 金矿插画），键由 `src/config.js` 的 `ASSET_KEYS` 定义，路径由 `assetPath()` 生成并带 `?v=<meta.version>` 指纹。`assets/manifest.json` 登记每个文件的画布尺寸与字节数，`scripts/check-assets.mjs` 逐项校验并解析 RIFF/WebP 头。`assets.retryCount` / `retryDelayMs` 控制 `onerror` 重试次数与间隔。
 
 `src/assets.js` 在加载时为每个 key 预生成三份派生画布：
 

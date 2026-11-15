@@ -66,11 +66,11 @@ for (const key of keys) {
 }
 const extras = actual.filter((f) => f.endsWith('.webp') && !keys.includes(f.replace('.webp', '')));
 if (extras.length) problems.push(`manifest 未登记: ${extras.join(', ')}`);
-const expected = [...UNIT_ORDER, 'statue', 'battlefield'].sort();
+const expected = [...UNIT_ORDER, 'statue', 'battlefield', 'goldmine'].sort();
 if (JSON.stringify([...keys].sort()) !== JSON.stringify(expected)) {
   problems.push(`素材键与配置不一致: ${keys.join(',')}`);
 }
-if (ASSET_KEYS.length !== 9) problems.push(`ASSET_KEYS 应为 9，实际 ${ASSET_KEYS.length}`);
+if (ASSET_KEYS.length !== 10) problems.push(`ASSET_KEYS 应为 10（含金矿插画），实际 ${ASSET_KEYS.length}`);
 ok.push(`WebP ${webpBytes} 字节 / ${(webpBytes / 1024).toFixed(1)} KiB，${keys.length} 文件，尺寸校验 ${sizeChecked}/${keys.length}`);
 
 // 渲染确定性：位图回归后这条约束仍然成立，暂停时画面必须逐帧一致。

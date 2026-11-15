@@ -1,7 +1,7 @@
 // 纯逻辑层：完全不碰 DOM / canvas / window。
 // 所有时间量单位为秒，所有速度单位为 px/s；由 main.js 的固定步长驱动。
-import { CONFIG, UNIT_ORDER } from './config.js?v=2.7.1';
-import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.7.1';
+import { CONFIG, UNIT_ORDER } from './config.js?v=2.8.0';
+import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.8.0';
 
 const C = CONFIG;
 
@@ -137,7 +137,7 @@ function tickFighter(state, u, dt, events) {
         ? (state.gameMode === 'attack' ? statueRightLine(state)
            : state.gameMode === 'garrison' ? fortX()
            : state.w * C.layout.defendLineRatio)
-        : statueLeftLine(state);
+        : aiGoalLine(state);  // v2.8：只有 assault 才压到玩家雕像，其余阶段守自家半场
       moveToward(u, goal, dt, 3, true);
     }
   }
@@ -158,20 +158,23 @@ function tickFighter(state, u, dt, events) {
 // 阶段切换时结转剩余 dt：挖掘完成/交付落在步中间，剩下的时间继续用于行走。
 function tickMiner(state, u, dt, events, diff) {
   const home = minerHomeX(state, u.team);
+  // v2.8：背着矿走得慢，回营这一段才像「运」而不是瞬移。
+  // 矿点也已从贴着雕像移到中场方向，最短单程 ≥ world.width*minMineHomeDistanceRatio。
+  const speed = u.speed * (u.carry > 0 ? C.economy.carrySpeedMul : 1);
   let remaining = dt;
   let guard = 0;
   while (remaining > 1e-9 && guard++ < 8) {
     if (u.job === 'toMine') {
       if (u.mineIndex < 0) u.mineIndex = chooseMineIndex(state, u.team, u.x);
       const target = mineXByIndex(state, u.mineIndex);
-      const t = Math.abs(target - u.x) / u.speed;
+      const t = Math.abs(target - u.x) / speed;
       if (t <= remaining + 1e-9) {
         u.x = target;
         u.job = 'mining';
         u.mineTimer = u.mineDuration;
         remaining -= t;
       } else {
-        u.x += Math.sign(target - u.x) * u.speed * remaining;
+        u.x += Math.sign(target - u.x) * speed * remaining;
         remaining = 0;
       }
     } else if (u.job === 'mining') {
@@ -185,7 +188,7 @@ function tickMiner(state, u, dt, events, diff) {
         remaining = 0;
       }
     } else {
-      const t = Math.abs(home - u.x) / u.speed;
+      const t = Math.abs(home - u.x) / speed;
       if (t <= remaining + 1e-9) {
         u.x = home;
         if (u.carry > 0) {
@@ -206,7 +209,7 @@ function tickMiner(state, u, dt, events, diff) {
         u.mineIndex = -1;
         remaining -= t;
       } else {
-        u.x += Math.sign(home - u.x) * u.speed * remaining;
+        u.x += Math.sign(home - u.x) * speed * remaining;
         remaining = 0;
       }
     }
@@ -322,6 +325,108 @@ function aiPopulation(state) {
   return countTeam(state, 1) + pendingTeam(state, 1);
 }
 
+/** 已出场的 AI 战斗兵（不含矿工、不含训练队列）。 */
+function aiFighterCount(state) {
+  let n = 0;
+  for (const u of state.units) {
+    if (u.team === 1 && u.kind !== 'miner' && u.hp > 0) n++;
+  }
+  return n;
+}
+
+/** 训练队列里的 AI 战斗兵，用于判断「这波还要不要再下单」。 */
+function aiPendingFighters(state) {
+  let n = 0;
+  for (const t of state.training) {
+    if (t.team === 1 && C.units[t.type].kind !== 'miner') n++;
+  }
+  return n;
+}
+
+/** v2.8：按玩家兵种构成调整出兵权重，堆得越多克制倾向越强（有饱和上限）。 */
+export function aiCounterWeight(state, aiType) {
+  let w = C.units[aiType].aiWeight;
+  const sat = C.ai.counterSaturation;
+  const counts = new Map();
+  for (const u of state.units) {
+    if (u.team === 0 && u.hp > 0 && u.kind !== 'miner') {
+      counts.set(u.type, (counts.get(u.type) ?? 0) + 1);
+    }
+  }
+  for (const [a, p, mul] of C.ai.counterMatrix) {
+    if (a !== aiType) continue;
+    const n = counts.get(p) ?? 0;
+    if (n > 0) w *= 1 + (mul - 1) * Math.min(1, n / sat);
+  }
+  return w;
+}
+
+/** 非进攻阶段的 AI 守线：与玩家 defendLineRatio 对称，落在自家半场。 */
+function aiGoalLine(state) {
+  return state.aiPhase === 'assault'
+    ? statueLeftLine(state)
+    : state.w * (1 - C.layout.defendLineRatio);
+}
+
+function setAiPhase(state, phase, events) {
+  if (state.aiPhase === phase) return;
+  state.aiPhase = phase;
+  state.aiPhaseSince = state.elapsed;
+  state.stats.aiPhaseChanges++;
+  if (phase === 'assault') {
+    state.stats.aiWaves++;
+    state.stats.aiMaxWaveSize = Math.max(state.stats.aiMaxWaveSize, state.aiWaveSize);
+  }
+  events.push({ type: 'aiPhase', phase, wave: state.aiWaveIndex });
+}
+
+/**
+ * 波次状态机：每个决策 tick 先流转阶段，再决定这一个动作。
+ * build    —— 先铺经济，达到最短时间且矿工达标才允许集结
+ * muster   —— 逐个下单直到「已出场 + 排队」够一波，等实际出场到 launchRatio 才发起进攻
+ * assault  —— 不再出兵，让这一波一起推；打残或超时即重整
+ * regroup  —— 补矿工/买科技，冷却结束后开下一波（波容递增）
+ */
+function updateAiPhase(state, events) {
+  const g = C.ai.wave;
+  const fighters = aiFighterCount(state);
+  const queued = aiPendingFighters(state);
+  const dwell = state.elapsed - state.aiPhaseSince;
+
+  switch (state.aiPhase) {
+    case 'build':
+      if (state.elapsed >= g.buildMinSec && aiMinerCount(state) >= aiMinerTarget(state)) {
+        setAiPhase(state, 'muster', events);
+      }
+      break;
+    case 'muster': {
+      const launched = fighters >= Math.max(1, Math.floor(state.aiWaveSize * g.launchRatio));
+      if (launched) setAiPhase(state, 'assault', events);
+      else if (dwell >= g.musterTimeoutSec && fighters >= 1) {
+        setAiPhase(state, 'assault', events);  // 钱不够时别把状态机卡死
+      }
+      break;
+    }
+    case 'assault': {
+      const wiped = fighters <= Math.max(1, Math.floor(state.aiWaveSize * g.retreatRatio));
+      if (wiped || dwell >= g.assaultTimeoutSec) setAiPhase(state, 'regroup', events);
+      break;
+    }
+    case 'regroup':
+      if (dwell >= g.regroupSec) {
+        state.aiWaveIndex++;
+        state.aiWaveSize = Math.min(g.maxWaveSize,
+          g.firstWaveSize + state.aiWaveIndex * g.waveSizeGrowth);
+        setAiPhase(state, 'muster', events);
+      }
+      break;
+    default:
+      setAiPhase(state, 'build', events);
+  }
+  // 供 aiDecide 判断 muster 是否还该继续下单
+  return fighters + queued;
+}
+
 /** 下单统一入口：真扣钱、按难度缩放训练时长、快照 AI 自己的 Armory。 */
 function aiEnqueue(state, type, diff, events) {
   const cfg = C.units[type];
@@ -363,29 +468,43 @@ export function aiGrowthInfo(state) {
     earned: state.stats.aiGoldEarned,
     planIndex: state.aiPlanIndex,
     minersTrained: state.stats.aiMinersTrained,
+    phase: state.aiPhase,
+    phaseSince: state.aiPhaseSince,
+    waveIndex: state.aiWaveIndex,
+    waveSize: state.aiWaveSize,
+    fighters: aiFighterCount(state),
+    queued: aiPendingFighters(state),
+    waves: state.stats.aiWaves,
+    maxWaveSize: state.stats.aiMaxWaveSize,
+    phaseChanges: state.stats.aiPhaseChanges,
   };
 }
 
 function aiDecide(state, rng, events, diff) {
   const g = C.ai;
+  const musterTotal = updateAiPhase(state, events);
   if (aiPopulation(state) >= state.limits.aiPopMax) return;
 
-  // 1) 补矿工：留一笔恢复经济的钱，矿工被打掉后会自动补回来。
+  // 1) 补矿工：任何阶段都最高优先，留一笔恢复经济的钱，被打掉会自动补回来。
   if (aiMinerCount(state) < aiMinerTarget(state) &&
       state.aiGold >= C.units.miner.cost + g.minerReserveGold) {
     aiEnqueue(state, 'miner', diff, events);
     return;
   }
-  // 2) 科技：按 upgradePlan 顺序买，节流由 aiUpgradeTimer 控制。
-  if (tryAiUpgrade(state, events)) return;
-  // 3) 军事：矿工达标后才动用预算，仍留足补矿工的钱。
+  // 2) 科技：进攻途中不买，其余阶段按 upgradePlan 顺序买（aiUpgradeTimer 节流）。
+  if (state.aiPhase !== 'assault' && tryAiUpgrade(state, events)) return;
+
+  // 3) 军事：只有集结阶段下单，攒够一波就停手；进攻/重整阶段不再零敲碎打。
+  if (state.aiPhase !== 'muster') return;
+  if (musterTotal >= state.aiWaveSize) return;
   const pool = UNIT_ORDER.filter((key) => {
     const u = C.units[key];
     return u.kind !== 'miner' && u.aiWeight > 0 &&
       (u.aiUnlockSec === null || state.elapsed >= u.aiUnlockSec);
   });
   if (!pool.length) return;
-  const type = rng.pickWeighted(pool, (k) => C.units[k].aiWeight);
+  // 针对性反制：玩家堆剑士 → 抬弓箭手；玩家堆远程 → 抬矛士/巨人/剑士。
+  const type = rng.pickWeighted(pool, (k) => aiCounterWeight(state, k));
   if (state.aiGold < C.units[type].cost + g.militaryReserveGold) return;
   aiEnqueue(state, type, diff, events);
 }

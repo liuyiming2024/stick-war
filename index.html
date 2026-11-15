@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#1e1e1e">
 <link rel="icon" href="data:,">
 <title>火柴人战争</title>
-<link rel="stylesheet" href="./styles/main.css?v=2.7.1">
+<link rel="stylesheet" href="./styles/main.css?v=2.8.0">
 </head>
 <body>
 
@@ -30,6 +30,7 @@
     <span class="home">我方 <b id="homeHp">1600</b></span>
     <span class="enemy">敌方 <b id="enemyHp">1600</b></span>
     <span class="enemyDev" id="aiDev" title="敌方矿工 / 科技 / 金币">敌方发育 —</span>
+    <span class="assetBadge" id="assetBadge" title="已加载的位图素材数">位图 —</span>
     <span class="clock" id="clock">00:00</span>
   </div>
 
@@ -40,6 +41,9 @@
     <button class="smallBtn defendBtn" id="defendBtn" aria-pressed="true">固守</button>
     <button class="smallBtn fortBtn" id="garrisonBtn" aria-pressed="false">驻堡</button>
     <button class="smallBtn" id="pauseBtn" aria-pressed="false">暂停</button>
+    <button class="smallBtn camBtn" id="camLeft" aria-label="视角左移" title="视角左移 / 拖动战场">◀</button>
+    <button class="smallBtn camBtn" id="camRight" aria-label="视角右移" title="视角右移 / 拖动战场">▶</button>
+    <button class="smallBtn camBtn" id="camFollow" aria-pressed="true" title="镜头跟随我方前锋">跟随</button>
     <button class="smallBtn menuBtn2" id="menuBtn">菜单</button>
   </div>
 
@@ -74,6 +78,6 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script type="module" src="./src/main.js?v=2.7.1"></script>
+<script type="module" src="./src/main.js?v=2.8.0"></script>
 </body>
 </html>

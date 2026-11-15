@@ -1,11 +1,13 @@
-import raw from './config.generated.js?v=2.7.1';
+import raw from './config.generated.js?v=2.8.0';
 
 export const CONFIG = raw;
 export const UNIT_ORDER = Object.keys(raw.units);
 export const DIFFICULTIES = Object.keys(raw.match.difficulties);
-export const ASSET_KEYS = [...UNIT_ORDER, 'statue', 'battlefield'];
+export const ASSET_KEYS = [...UNIT_ORDER, 'statue', 'battlefield', 'goldmine'];
 
-export const assetPath = (key) => `./assets/${key}.webp`;
+// v2.8：素材 URL 也带版本指纹。否则浏览器可能长时间缓存一次失败的响应，
+// 表现为「位图一直没放上去、只有线稿替身」。
+export const assetPath = (key) => `./assets/${key}.webp?v=${raw.meta.version}`;
 
 /** 矿工按原版 Armory 只有「背包 / 镐 / 移速」三个维度，其他兵种是攻/防/速。 */
 export function upgradeStats(type) {
