@@ -1,4 +1,4 @@
-import { CONFIG, UNIT_ORDER, bonusFor, freshUpgrades } from './config.js?v=2.8.0';
+import { CONFIG, UNIT_ORDER, bonusFor, freshUpgrades } from './config.js?v=2.9.0';
 
 // 纯状态：不引用 DOM / canvas，可在 Node 下直接构造与推演。
 export function createState(w = CONFIG.world.width, h = CONFIG.world.height, difficulty = 'normal') {
@@ -15,6 +15,8 @@ export function createState(w = CONFIG.world.width, h = CONFIG.world.height, dif
     phase: 'menu',              // menu | playing | paused | won | lost
     difficulty: CONFIG.match.difficulties[difficulty] ? difficulty : 'normal',
     gold: CONFIG.match.startingGold,
+    // v2.9：宝石是免费且可无限领取的第二货币，金币不足时自动 1:1 抵扣。
+    gems: CONFIG.gems.starting,
     aiGold: CONFIG.economy.aiStartGold,
     homeHp: CONFIG.match.statueHp,
     enemyHp: CONFIG.match.statueHp * diff.enemyStatueMul,
@@ -47,6 +49,7 @@ export function createState(w = CONFIG.world.width, h = CONFIG.world.height, dif
       trained: 0, cancelled: 0, fortArrows: 0,
       aiMinersTrained: 0, aiUpgrades: 0, aiGoldEarned: 0,
       aiWaves: 0, aiMaxWaveSize: 0, aiPhaseChanges: 0,
+      gemsGranted: 0, gemPayments: 0, gemsSpent: 0,
     },
   };
 }

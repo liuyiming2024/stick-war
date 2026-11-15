@@ -1,7 +1,7 @@
-import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.8.0';
-import { unitIconHTML, toolSVG } from './icons.js?v=2.8.0';
-import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.8.0';
-import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo } from './simulation.js?v=2.8.0';
+import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.9.0';
+import { unitIconHTML, toolSVG, gemSVG } from './icons.js?v=2.9.0';
+import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.9.0';
+import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo, canAfford } from './simulation.js?v=2.9.0';
 
 const C = CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -10,7 +10,8 @@ export function createUI(state, actions) {
   const el = {
     mainMenu: $('mainMenu'), gameUI: $('gameUI'), loadTip: $('loadTip'),
     startBtn: $('startBtn'), helpBtn: $('helpBtn'), menuSub: $('menuSub'),
-    gold: $('gold'), pop: $('pop'), popMax: $('popMax'),
+    gold: $('gold'), gems: $('gems'), gemBadge: $('gemBadge'), gemBtn: $('gemBtn'),
+    pop: $('pop'), popMax: $('popMax'),
     homeHp: $('homeHp'), enemyHp: $('enemyHp'), clock: $('clock'), aiDev: $('aiDev'),
     unitBar: $('unitBar'), shopGrid: $('shopGrid'), upgradeGrid: $('upgradeGrid'),
     shopPanel: $('shopPanel'), upgradePanel: $('upgradePanel'),
@@ -44,7 +45,10 @@ export function createUI(state, actions) {
   function spawn(type) {
     const r = spawnPlayer(state, type);
     if (!r.ok) toast(r.reason);
-    else toast(`${C.units[type].name} 训练中 ${r.trainSec}s（点队列可取消退款）`);
+    else {
+      const viaGem = r.paid?.gems > 0 ? `（宝石抵 ${r.paid.gems}）` : '';
+      toast(`${C.units[type].name} 训练中 ${r.trainSec}s${viaGem}（点队列可取消退款）`);
+    }
     sync();
   }
 
@@ -166,6 +170,7 @@ export function createUI(state, actions) {
     document.body.dataset.phase = state.phase;
     const pop = countTeam(state, 0);
     setText(el.gold, 'gold', String(Math.round(state.gold)));
+    setText(el.gems, 'gems', String(Math.round(state.gems)));
     setText(el.pop, 'pop', String(pop + pendingTeam(state, 0)));
     setText(el.homeHp, 'homeHp', String(Math.max(0, Math.round(state.homeHp))));
     setText(el.enemyHp, 'enemyHp', String(Math.max(0, Math.round(state.enemyHp))));
@@ -178,7 +183,7 @@ export function createUI(state, actions) {
     const playable = state.phase === 'playing';
     const full = pop + pendingTeam(state, 0) >= state.limits.popMax;
     for (const [key, btn] of unitButtons) {
-      const disabled = !playable || full || state.gold < C.units[key].cost;
+      const disabled = !playable || full || !canAfford(state, C.units[key].cost);
       if (btn.disabled !== disabled) btn.disabled = disabled;  // 真禁用，不只是置灰
     }
     for (const [btn, mode] of [[el.attackBtn, 'attack'], [el.defendBtn, 'defend'], [el.garrisonBtn, 'garrison']]) {
@@ -189,7 +194,7 @@ export function createUI(state, actions) {
     el.pauseBtn.textContent = state.phase === 'paused' ? '继续' : '暂停';
     el.camFollow.setAttribute('aria-pressed', String(!!state.view.follow));
     for (const { key, stat, node } of upgradeButtons) {
-      const disabled = !playable || state.gold < C.upgrade.cost ||
+      const disabled = !playable || !canAfford(state, C.upgrade.cost) ||
         upgradeLevels(state, key)[stat] >= C.upgrade.maxLevel;
       if (node.disabled !== disabled) node.disabled = disabled;
     }
@@ -271,6 +276,7 @@ export function createUI(state, actions) {
         `敌方出兵 ${state.stats.aiSpawned} · 矿工 ${dev.minersTrained} 名 / ${dev.trips} 趟 · 科技 ${dev.upgrades} 级`,
         `敌方累计采矿 ${Math.round(dev.earned)} 金 · 取消训练 ${state.stats.cancelled}`,
         `城堡弓箭 ${state.stats.fortArrows} 发`,
+        `领取宝石 ${state.stats.gemsGranted} 次 · 抵扣 ${state.stats.gemsSpent} 颗`,
       ],
     );
   }
@@ -305,6 +311,8 @@ export function createUI(state, actions) {
   function bind() {
     $('shopBtn').innerHTML = `${toolSVG('shop')}<span>商店</span>`;
     $('upgradeBtn').innerHTML = `${toolSVG('upgrade')}<span>升级</span>`;
+    el.gemBtn.innerHTML = `${gemSVG()}<span>领宝石</span>`;
+    el.gemBtn.addEventListener('click', () => actions.grantGems());
     for (const [key, d] of Object.entries(C.match.difficulties)) {
       const opt = document.createElement('option');
       opt.value = key;
@@ -313,7 +321,7 @@ export function createUI(state, actions) {
     }
     el.difficulty.value = state.difficulty;
     el.startBtn.addEventListener('click', () => actions.start(el.difficulty.value));
-    el.helpBtn.addEventListener('click', () => toast('矿工就近挖自家矿脉；单位需要训练时间；A/D/G 进攻/固守/驻堡；点队列可取消退款'));
+    el.helpBtn.addEventListener('click', () => toast('底栏「领宝石」免费无限领，金币不足自动 1:1 抵扣；矿工就近挖自家矿；A/D/G 攻守驻；点队列可取消退款'));
     $('menuBtn').addEventListener('click', () => actions.goMenu());
     el.pauseBtn.addEventListener('click', () => actions.togglePause());
     el.attackBtn.addEventListener('click', () => mode('attack'));

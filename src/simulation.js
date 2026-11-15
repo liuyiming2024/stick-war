@@ -1,7 +1,7 @@
 // 纯逻辑层：完全不碰 DOM / canvas / window。
 // 所有时间量单位为秒，所有速度单位为 px/s；由 main.js 的固定步长驱动。
-import { CONFIG, UNIT_ORDER } from './config.js?v=2.8.0';
-import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.8.0';
+import { CONFIG, UNIT_ORDER } from './config.js?v=2.9.0';
+import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.9.0';
 
 const C = CONFIG;
 
@@ -286,16 +286,56 @@ function separate(units, dt) {
   }
 }
 
-function enqueue(state, type, team, upgrades, events, trainSec = C.units[type].trainSec) {
+function enqueue(state, type, team, upgrades, events,
+  trainSec = C.units[type].trainSec, paid = null) {
   const t = {
     id: state.nextTrainingId++,
     type, team,
     due: state.elapsed + trainSec,
     upgrades,
+    // v2.9：玩家订单记录「金币 / 宝石」实扣构成，取消时按原路退回，
+    // 避免「用宝石下单 → 取消退金币」把无限宝石洗成金币。
+    paid,
   };
   state.training.push(t);
   events.push({ type: 'training', team, unit: type, id: t.id });
   return t;
+}
+
+// ── v2.9：宝石 = 免费、无限、可当金币花 ────────────────────────────────
+/** 可购买力：金币 + 宝石按 goldPerGem 折算。UI 按钮禁用与下单共用这一个口径。 */
+export function canAfford(state, amount) {
+  const rest = Math.max(0, amount - Math.min(state.gold, amount));
+  const gemsNeeded = rest <= 1e-9 ? 0 : Math.ceil((rest - 1e-9) / C.gems.goldPerGem);
+  return state.gems + 1e-9 >= gemsNeeded;
+}
+
+/** 领取宝石：无冷却、无上限、不花任何东西，可无限次调用。 */
+export function grantGems(state) {
+  const amount = C.gems.grantAmount;
+  state.gems += amount;
+  state.stats.gemsGranted++;
+  return { ok: true, amount, total: state.gems };
+}
+
+/**
+ * 统一支付：优先扣金币，不足部分由宝石按 goldPerGem 向上取整抵扣。
+ * 返回实扣构成（供退款）；买不起返回 null。
+ * AI 侧不走这里——它仍只花 aiGold，不受玩家宝石影响。
+ */
+function pay(state, amount) {
+  if (!canAfford(state, amount)) return null;
+  const fromGold = Math.min(state.gold, amount);
+  const rest = Math.max(0, amount - fromGold);
+  const gems = rest <= 1e-9 ? 0 : Math.ceil((rest - 1e-9) / C.gems.goldPerGem);
+  if (state.gems + 1e-9 < gems) return null;
+  state.gold -= fromGold;
+  state.gems -= gems;
+  if (gems > 0) {
+    state.stats.gemPayments++;
+    state.stats.gemsSpent += gems;
+  }
+  return { fromGold, gems, amount };
 }
 
 // ── v2.7：敌方发育 ──────────────────────────────────────────────────────
@@ -613,16 +653,17 @@ export function spawnPlayer(state, type) {
   if (state.phase !== 'playing') return { ok: false, reason: '未在对局中' };
   const cfg = C.units[type];
   if (!cfg) return { ok: false, reason: '未知兵种' };
-  if (state.gold < cfg.cost) return { ok: false, reason: '金币不够' };
+  if (!canAfford(state, cfg.cost)) return { ok: false, reason: '金币/宝石不够，点底栏宝石可免费领' };
   if (countTeam(state, 0) + pendingTeam(state, 0) >= state.limits.popMax) {
     return { ok: false, reason: '人口已满' };
   }
-  state.gold -= cfg.cost;
+  const paid = pay(state, cfg.cost);
+  if (!paid) return { ok: false, reason: '金币/宝石不够，点底栏宝石可免费领' };
   // bonusFor 取 upgrades[type]，必须是 { [type]: levels }；只传单层 level 对象
   // 会让升级静默失效（旧实现的 bug），AI 侧 aiEnqueue 同样按这个结构快照。
   const snapshot = { [type]: { ...state.upgrades[type] } };
-  const t = enqueue(state, type, 0, snapshot, []);
-  return { ok: true, trainingId: t.id, trainSec: cfg.trainSec };
+  const t = enqueue(state, type, 0, snapshot, [], cfg.trainSec, paid);
+  return { ok: true, trainingId: t.id, trainSec: cfg.trainSec, paid };
 }
 
 /** 原版：再点一次图标可取消训练并退款。 */
@@ -631,8 +672,15 @@ export function cancelTraining(state, id) {
   if (idx < 0) return { ok: false, reason: '该训练已结束' };
   const t = state.training[idx];
   const refund = C.units[t.type].cost;
-  if (t.team === 0) state.gold += refund;
-  else state.aiGold += refund;
+  if (t.team === 1) {
+    state.aiGold += refund;                 // AI 订单仍只花 aiGold
+  } else if (t.paid) {
+    // 原路退回：金币部分回金币、宝石部分回宝石，不能把无限宝石洗成金币。
+    state.gold += t.paid.fromGold;
+    state.gems += t.paid.gems;
+  } else {
+    state.gold += refund;                   // 兼容测试里手工构造的旧订单
+  }
   state.training.splice(idx, 1);
   state.stats.cancelled++;
   return { ok: true, refund, type: t.type };
@@ -643,10 +691,13 @@ export function doUpgrade(state, type, stat) {
   const lv = state.upgrades[type];
   if (!lv || !(stat in lv)) return { ok: false, reason: '未知升级项' };
   if (lv[stat] >= C.upgrade.maxLevel) return { ok: false, reason: '已满级' };
-  if (state.gold < C.upgrade.cost) return { ok: false, reason: '金币不足' };
-  state.gold -= C.upgrade.cost;
+  if (!canAfford(state, C.upgrade.cost)) {
+    return { ok: false, reason: '金币/宝石不足，点底栏宝石可免费领' };
+  }
+  const paid = pay(state, C.upgrade.cost);
+  if (!paid) return { ok: false, reason: '金币/宝石不足，点底栏宝石可免费领' };
   lv[stat]++;
-  return { ok: true };
+  return { ok: true, paid };
 }
 
 export function setMode(state, mode) {

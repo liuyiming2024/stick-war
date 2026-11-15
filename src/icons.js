@@ -1,4 +1,4 @@
-import { CONFIG, assetPath } from './config.js?v=2.8.0';
+import { CONFIG, assetPath } from './config.js?v=2.9.0';
 
 const P = CONFIG.presentation;
 
@@ -11,6 +11,17 @@ export function unitIconHTML(key) {
 /** 供测试用：工具 SVG 不得引用外部资源。 */
 export function hasExternalResource(svg) {
   return /(?:href|src)\s*=\s*["'](?!#)/i.test(svg) || /url\(/i.test(svg) || /\.(?:webp|png|jpe?g|gif|svg)/i.test(svg);
+}
+
+/** v2.9：宝石图标。刻意不用 .vIcon 类——工具按钮计数断言只管商店/升级两个。 */
+export function gemSVG() {
+  const O = P.outline;
+  return `<svg class="gemIcon" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <path d="M14 22 L22 10 H42 L50 22 L32 54 Z" fill="${P.gem}" stroke="${O}" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M14 22 H50 M22 10 L26 22 L32 54 L38 22 L42 10" fill="none" stroke="${P.gemDark}" stroke-width="1.8" stroke-linejoin="round"/>
+  <path d="M22 10 L26 22 H14 Z M42 10 L38 22 H50 Z" fill="${P.gemLight}" opacity=".75"/>
+  <path d="M26 22 L32 54 L38 22 Z" fill="${P.gemLight}" opacity=".28"/>
+</svg>`;
 }
 
 /** 工具按钮图标：商店与升级，纯内联矢量，无资源请求。 */

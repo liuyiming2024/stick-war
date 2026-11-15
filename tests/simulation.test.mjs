@@ -146,6 +146,7 @@ test('雕像绘制与伤害共用同一条判定线', () => {
 test('出兵校验：金币、人口、对局状态三重约束', () => {
   const s = playing();
   s.gold = 10;
+  s.gems = 0;  // v2.9：关掉宝石抵扣，才能单独验证「纯金币不足」
   assert.equal(spawnPlayer(s, 'sword').ok, false);
   s.gold = 1000;
   s.limits.popMax = 1;

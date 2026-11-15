@@ -1,7 +1,7 @@
-# 火柴人战争（网页版 v2.8.0）
+# 火柴人战争（网页版 v2.9.0）
 
 > 从「一个 18KB 的 `index.html` 包办一切」重构成模块化、可配置、可测试、可继续迭代的静态游戏。
-> v2.7 敌方发育 → v2.7.1 ESM 缓存指纹 → **v2.8：移动端视口 + 真正运矿 + 位图金矿 + 波次指挥**。窄屏不再把整场压扁，改为固定 1600×800 逻辑世界 + 可拖动/可跟随的镜头；矿点挪离雕像并给矿工加负重减速；补一张金矿插画、增强全部立绘；AI 攒够一波再进攻，并针对玩家兵种调整出兵。
+> v2.8 移动端视口 / 位图金矿 / 波次指挥 → **v2.9：宝石无限 + 难度整体下调**。底栏「领宝石」免费、无冷却、无上限，金币不足自动 1:1 抵扣，出兵与升级都直接当金币花；三档难度倍率、首波规模、集结节奏全面放缓，起始金币提到 200。
 
 [![CI](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml/badge.svg)](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml)
 
@@ -21,6 +21,58 @@ python3 -m http.server 4173
 ```
 
 无运行时构建步骤，改完刷新即可；只有改 `config/game.json` 才需要 `npm run build` 重新生成 `src/config.generated.js` 与 ESM 版本指纹。10 张 WebP 合计 **289404 字节 / 282.6 KiB**，两段式超时（9s / 26s）+ 单次失败重试放行后即可开战，弱网下晚到的图片会补登记；顶栏 `位图 10/10` 徽标可随时核验。
+
+## v2.9：宝石无限，难度降下来
+
+反馈是两条：**难度太高**，以及要一种「叫宝石的免费金币」——免费送、无限领、能直接当金币花。
+
+### 宝石 = 免费 / 无限 / 可当金币用
+
+`config/game.json` 的 `gems` 段是唯一口径：
+
+| 字段 | 值 | 含义 |
+| --- | --- | --- |
+| `starting` | 999 | 开局就送，不用做任何事 |
+| `grantAmount` | 500 | 底栏「领宝石」每次 +500 |
+| `goldPerGem` | 1 | 1 颗 = 1 金币 |
+| `autoSpend` | true | 金币不足自动抵扣 |
+
+`grantGems(state)` 无冷却、无总量上限、不花任何东西，可以无限次调用。`build-config.mjs` 会**静态拒绝** `cooldownSec` / `maxTotal` / `cost` 这类字段，防止后来人把「免费无限」改回付费或限次。
+
+支付收敛到一个 `pay(state, amount)`：优先扣金币，差额按 `goldPerGem` **向上取整**成整颗宝石补足。`spawnPlayer()` 与 `doUpgrade()` 共用它，`canAfford()` 是 UI 按钮禁用与下单的同一个判定口径——所以金币为 0 时兵种栏不会灰掉，点一下照样下单。
+
+**取消训练按原路退款**：`enqueue()` 记录 `paid = { fromGold, gems }`，`cancelTraining()` 把金币退回金币、宝石退回宝石。否则「用无限宝石下单 → 取消退金币」会把宝石洗成金币，破坏经济口径。AI 订单不走这套，仍只花 `aiGold`。
+
+UI：顶栏 `宝石 999`（窄屏隐藏文字、保留数值），底栏新增 `领宝石` 按钮（内联 SVG 钻石图标，刻意不用 `.vIcon` 类以免干扰工具按钮计数），下单 toast 显示「宝石抵 N」，结算面板追加领取次数与抵扣颗数。
+
+### 难度整体下调
+
+| 项 | v2.8 | v2.9 | 效果 |
+| --- | --- | --- | --- |
+| `match.startingGold` | 120 | **200** | 开局能直接出兵 |
+| `normal.aiIncomeMul` | 1 | **0.7** | 敌方矿工收益 −30% |
+| `normal.aiSpawnMul` | 1 | **1.35** | 敌方训练慢 35% |
+| `normal.enemyStatueMul` | 1 | **0.8** | 敌方雕像 1600 → 1280 |
+| `economy.aiGoldPerSec` | 1.5 | **1** | 凭空收入再砍 1/3 |
+| `wave.firstWaveSize` | 4 | **3** | 首波更小 |
+| `wave.maxWaveSize` | 9 | **6** | 后期不再堆到 9 个 |
+| `wave.buildMinSec` | 12 | **18** | 开局多 6 秒喘息 |
+| `wave.regroupSec` | 7 | **10** | 波与波之间更松 |
+
+困难/疯狂档同步下调（`insane`: 收入 1.7→1.35、训练 0.6→0.85、雕像 1.5→1.25），仍保持 `normal < hard < insane` 的单调关系，`build-config.mjs` 会校验这一点。
+
+**纯逻辑推演**（seed=7，不领宝石）：
+
+```
+挂机不出兵      normal 183s 败 / hard 152s 败 / insane 138s 败
+进攻·每4s剑士   normal 57s 胜，我方雕像满血
+进攻·每4s混编   normal 61s 胜
+进攻·每2s混编   normal 52s 胜（触发 2 次免费领取）
+```
+
+挂机仍会输，切「进攻」就能在一分钟左右赢——宝石不是把游戏改成无敌，而是让资源不再卡住操作。
+
+**验证**：82 个单测（新增 `gems.test.mjs` 14 项）、76 项 Playwright 断言（含顶栏宝石 / 连点 6 次全额生效 / 金币清零后按钮仍可点 / `paid` 实扣构成 / 取消原路退回）、素材与确定性静态自检、导航自检，全绿。历史章节里 v2.8 的 68/69 是当时的计数，未回改。
 
 ## v2.8：手机能玩、矿要运、图要好看、对面会打波次
 
@@ -61,7 +113,7 @@ v2.3/v2.4 手写路径、v2.6 菱形符号都没达到「够精美」。这轮�
 
 非 `assault` 阶段 AI 战斗兵守在自家半场（`1 - defendLineRatio`），不再零敲碎打地往前送。`counterMatrix` 按玩家兵种构成抬权重（堆剑士 → 弓箭手 ×2.2；堆远程 → 矛士/巨人），用 `counterSaturation` 做饱和上限防止一边倒。120 秒推演：普通难度约 3 波、12 个战斗兵、3 级科技。
 
-**验证**：68 个单测（新增 `world-waves.test.mjs` 11 项）、69 项 Playwright 断言（含窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头平移与跟随/宽屏 resize）、素材与确定性静态自检、导航自检，全绿。
+**验证（v2.8 当时）**：68 个单测（新增 `world-waves.test.mjs` 11 项）、69 项 Playwright 断言（含窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头平移与跟随/宽屏 resize）、素材与确定性静态自检、导航自检，全绿。
 
 ## v2.7.1：修掉「线上还停在旧版本」
 
@@ -193,7 +245,8 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 | 无超时、无脏检查 | 软/硬两段超时、UI 数值脏检查、支持 DPR |
 | manifest 有 `png/jpg` 幽灵字段、体积口径不准 | `check-assets.mjs` 逐项校验字节数并解析 WebP 头校验画布尺寸：**289404 字节 / 282.6 KiB / 10 文件，10/10 通过** |
 | 全内联 onclick、字符串拼 handler | 统一 `addEventListener`，兵种栏/商店/升级由 `icons.js` 生成 `<img>`，工具按钮用内联 SVG |
-| 无配置、无测试、无 CI | 单一配置源 + **68 个单测** + GitHub Actions |
+| 无配置、无测试、无 CI | 单一配置源 + **82 个单测** + GitHub Actions |
+| 金币卡死、难度陡峭 | 宝石免费无限领 + `canAfford/pay` 统一抵扣 + 三档倍率与波次整体放缓、起始金币 200 |
 | 全战场只有一个黄圈当金矿 | 双侧各 3 个位图金矿插画，只挖自家半场；矿点远离雕像、背矿减速，一趟往返约 12 秒 |
 | 手机把整场压进一屏、影子发虚 | 固定 1600×800 逻辑世界 + 可拖动/跟随镜头 + DPR 画布 + 双层钳制柔影 |
 | 面板/浮层没有关闭叉号 | 商店、升级、暂停、结算四层都有 `×`，外加 `Esc` 分级后退、点遮罩、底部关闭按钮 |
@@ -204,7 +257,7 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 index.html                    页面骨架
 styles/main.css               暗色 HUD、面板层级 z-index 约定、位图/SVG 动画与暂停冻结
 assets/                       10 张 WebP + manifest.json
-config/game.json              ★ 唯一配置源（含 world 视口、ai 波次/反制、assets 超时、animation、presentation）
+config/game.json              ★ 唯一配置源（含 gems 宝石、world 视口、ai 波次/反制、assets 超时、animation、presentation）
 config/README.md              字段含义
 src/config.generated.js       生成物，必须提交
 src/config.js                 配置访问、ASSET_KEYS / 带版本指纹的 assetPath、升级维度与倍率派生
@@ -221,9 +274,9 @@ scripts/build-config.mjs      配置生成 + 结构校验
 scripts/stamp-cache.mjs       给 ESM 入口与所有相对 import 加 ?v=<version> 缓存指纹（幂等）
 scripts/check-assets.mjs      素材清单 / WebP 头 / 渲染确定性 / 缓存指纹静态自检
 scripts/check-navigation.mjs  退出通道静态自检
-scripts/smoke-pages.mjs       Playwright 可达性烟测（69 项）
+scripts/smoke-pages.mjs       Playwright 可达性烟测（76 项）
 scripts/serve.mjs             零依赖静态服务
-tests/                         node:test，68 个用例（7 个文件；含 world-waves.test.mjs）
+tests/                         node:test，82 个用例（8 个文件；含 world-waves.test.mjs / gems.test.mjs）
 docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 .github/workflows/ci.yml       CI
 ```
@@ -235,8 +288,8 @@ docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 ```bash
 vim config/game.json
 npm run build              # 重新生成 src/config.generated.js
-npm run smoke              # 可选：本机 Chrome 跑 69 项可达性断言
-npm run check              # 生成 + 68 单测 + 素材/确定性静态自检
+npm run smoke              # 可选：本机 Chrome 跑 76 项可达性断言
+npm run check              # 生成 + 82 单测 + 素材/确定性静态自检
 ```
 
 `src/config.generated.js` 与所有带 `?v=` 指纹的 `src/*.js` / `index.html` 必须一起提交（Pages 直出静态文件）。**改 `meta.version` 后不跑 `npm run build` 会让线上继续吃旧缓存**——CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 守住一致性。加新兵种要同时补 `assets/<key>.webp` 与 `assets/manifest.json`，UI 与渲染会自动长出；改动画节奏只动 `animation` 段，改配色只动 `presentation` 段。
@@ -267,10 +320,10 @@ npm run check              # 生成 + 68 单测 + 素材/确定性静态自检
 「可达」= **每个能进的层都能出、每份资源都能取到、暂停时画面真的静止**：
 
 ```bash
-npm run smoke     # 需要本机 Chrome；自动起静态服务，69 项断言
+npm run smoke     # 需要本机 Chrome；自动起静态服务，76 项断言
 ```
 
-覆盖：首页 200、10 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、**逻辑世界 1600×800 / 窄屏只显示一段 / 镜头可平移 / Canvas 按 DPR 分配 / 矿点不贴回营点 / 金矿用位图插画 / `位图 10/10` 徽标 / 跟随开关 / 宽屏 resize 不改世界尺寸**、训练队列下单/退款、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
+覆盖：首页 200、10 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、**逻辑世界 1600×800 / 窄屏只显示一段 / 镜头可平移 / Canvas 按 DPR 分配 / 矿点不贴回营点 / 金矿用位图插画 / `位图 10/10` 徽标 / 跟随开关 / 宽屏 resize 不改世界尺寸**、训练队列下单/退款、**顶栏宝石 / 连点 6 次免费领取全生效 / 金币清零后按钮仍可点 / `paid` 实扣构成 / 取消原路退回**、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
 
 CI 里跑 `scripts/check-navigation.mjs` 与 `scripts/check-assets.mjs` 做静态兜底（不需要浏览器）。
 

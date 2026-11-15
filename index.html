@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#1e1e1e">
 <link rel="icon" href="data:,">
 <title>火柴人战争</title>
-<link rel="stylesheet" href="./styles/main.css?v=2.8.0">
+<link rel="stylesheet" href="./styles/main.css?v=2.9.0">
 </head>
 <body>
 
@@ -20,12 +20,15 @@
   </label>
   <button class="menuBtn" id="startBtn" disabled>开始战斗</button>
   <button class="menuBtn ghost" id="helpBtn">玩法说明</button>
-  <p class="hint" id="menuHint">键盘 1–7 出兵 · A/D/G 切攻守驻 · P 暂停 · Esc 后退</p>
+  <p class="hint" id="menuHint">底栏「领宝石」免费无限领，可当金币花 · 1–7 出兵 · A/D/G 攻守驻 · P 暂停 · Esc 后退</p>
 </div>
 
 <div id="gameUI" hidden>
   <div id="topBar">
-    <span>金币 <b id="gold">120</b></span>
+    <span>金币 <b id="gold">200</b></span>
+    <span class="gemBadge" id="gemBadge" title="宝石免费、可无限领取；金币不足时自动 1:1 抵扣，直接当金币用">
+      <span class="gemLabel">宝石</span> <b id="gems">999</b>
+    </span>
     <span>人口 <b id="pop">0</b>/<b id="popMax">20</b></span>
     <span class="home">我方 <b id="homeHp">1600</b></span>
     <span class="enemy">敌方 <b id="enemyHp">1600</b></span>
@@ -51,6 +54,7 @@
   <div id="queueStrip" aria-label="训练队列"></div>
 
   <div id="bottomBar">
+    <button class="toolBtn gemBtn" id="gemBtn" aria-label="免费领取宝石" title="免费无限领取宝石，可当金币使用"><span>领宝石</span></button>
     <button class="toolBtn" id="shopBtn" aria-label="打开兵种商店"><span>商店</span></button>
     <button class="toolBtn" id="upgradeBtn" aria-label="打开升级面板"><span>升级</span></button>
     <div id="unitBar" role="group" aria-label="出兵"></div>
@@ -61,14 +65,14 @@
 
   <section id="shopPanel" hidden aria-label="兵种商店">
     <button class="panelClose" id="closeShopX" type="button" aria-label="关闭兵种商店" title="关闭（Esc）">×</button>
-    <h2>兵种商店 <span class="panelHint">点击卡片下单训练</span></h2>
+    <h2>兵种商店 <span class="panelHint">点击卡片下单训练 · 金币不足自动用宝石抵扣</span></h2>
     <div class="shopGrid" id="shopGrid"></div>
     <button class="closeBtn" id="closeShop">关闭商店</button>
   </section>
 
   <section id="upgradePanel" hidden aria-label="兵种升级面板">
     <button class="panelClose" id="closeUpgradeX" type="button" aria-label="关闭兵种升级面板" title="关闭（Esc）">×</button>
-    <h2>兵种升级 <span class="panelHint">每级 80 金币 · 矿工为背包/镐/移速</span></h2>
+    <h2>兵种升级 <span class="panelHint">每级 80 金币（可用宝石） · 矿工为背包/镐/移速</span></h2>
     <div class="upgradeGrid" id="upgradeGrid"></div>
     <button class="closeBtn" id="closeUpgrade">关闭升级</button>
   </section>
@@ -78,6 +82,6 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script type="module" src="./src/main.js?v=2.8.0"></script>
+<script type="module" src="./src/main.js?v=2.9.0"></script>
 </body>
 </html>

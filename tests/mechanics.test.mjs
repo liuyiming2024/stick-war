@@ -215,14 +215,15 @@ test('矿工 Armory 维度是背包/镐/移速，倍率按配置派生', () => {
 test('难度放大敌方雕像血量与 AI 收入，重开后保留难度', () => {
   const normal = quiet(playing('normal'));
   const insane = quiet(playing('insane'));
-  assert.equal(normal.enemyHp, C.match.statueHp);
-  assert.equal(insane.enemyHp, C.match.statueHp * C.match.difficulties.insane.enemyStatueMul);
+  const dn = C.match.difficulties.normal, di = C.match.difficulties.insane;
+  assert.equal(normal.enemyHp, C.match.statueHp * dn.enemyStatueMul);
+  assert.equal(insane.enemyHp, C.match.statueHp * di.enemyStatueMul);
   run(normal, 10);
   run(insane, 10);
   const nInc = normal.aiGold - C.economy.aiStartGold;
   const iInc = insane.aiGold - C.economy.aiStartGold;
-  assert.ok(Math.abs(iInc / nInc - C.match.difficulties.insane.aiIncomeMul) < 1e-6,
-    `收入倍率 ${iInc / nInc}`);
+  assert.ok(Math.abs(iInc / nInc - di.aiIncomeMul / dn.aiIncomeMul) < 1e-6,
+    `收入倍率 ${iInc / nInc}，期望 ${di.aiIncomeMul / dn.aiIncomeMul}`);
 
   assert.equal(setDifficulty(insane, 'hard'), true);
   resetMatch(insane);

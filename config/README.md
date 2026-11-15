@@ -4,8 +4,8 @@
 
 ```bash
 npm run build     # 重新生成 src/config.generated.js + 结构校验
-npm run check     # 生成 + 68 个单测 + 素材/渲染确定性静态自检
-npm run smoke     # 可选：69 项页面可达性断言
+npm run check     # 生成 + 82 个单测 + 素材/渲染确定性静态自检
+npm run smoke     # 可选：76 项页面可达性断言
 ```
 
 `src/config.generated.js` 必须一起提交（Pages 从 `main` 直出，运行时不跑构建）。CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 校验漂移。

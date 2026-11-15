@@ -189,6 +189,58 @@ try {
   await page.click('#defendBtn');
   check('可切回固守', (await page.evaluate(() => window.__stickWar.state.gameMode)) === 'defend');
 
+  // v2.9 宝石：免费无限领、可当金币花、取消训练原路退回
+  const gemNumber = await page.locator('#gems').innerText();
+  check('顶栏展示宝石资源（窄屏保留数值）', Number(gemNumber) > 0, `宝石=${gemNumber}`);
+  check('底栏有领宝石入口', await page.isVisible('#gemBtn'));
+  const gem0 = await page.evaluate(() => window.__stickWar.state.gems);
+  for (let i = 0; i < 6; i++) await page.click('#gemBtn');
+  const gemAfterGrants = await page.evaluate(() => ({
+    gems: window.__stickWar.state.gems,
+    grants: window.__stickWar.state.stats.gemsGranted,
+    gold: window.__stickWar.state.gold,
+  }));
+  check('宝石免费且无冷却：连点 6 次全部生效',
+    gemAfterGrants.grants === 6 &&
+    Math.abs(gemAfterGrants.gems - (gem0 + 6 * 500)) < 1e-6,
+    `${gem0} → ${gemAfterGrants.gems}，领取 ${gemAfterGrants.grants} 次`);
+
+  // 把金币清零，验证出兵自动走宝石抵扣
+  await page.evaluate(() => { window.__stickWar.state.gold = 0; });
+  const gemsBeforeBuy = await page.evaluate(() => window.__stickWar.state.gems);
+  await page.locator('#unitBar .unitIcon').nth(0).click();  // 矿工 25 金
+  const afterBuy = await page.evaluate(() => {
+    const w = window.__stickWar;
+    return {
+      gems: w.state.gems, gold: w.state.gold,
+      queue: document.querySelectorAll('#queueStrip .queueItem').length,
+      paid: w.state.training.find((t) => t.team === 0)?.paid ?? null,
+      gemPayments: w.state.stats.gemPayments,
+    };
+  });
+  check('金币为 0 时仍可出兵（按钮未被禁用）', afterBuy.queue === 1,
+    `队列 ${afterBuy.queue}`);
+  check('下单自动扣宝石且不动金币',
+    afterBuy.paid && afterBuy.paid.gems >= 25 && afterBuy.gold < 1,
+    `paid=${JSON.stringify(afterBuy.paid)} gold=${afterBuy.gold}`);
+  check('宝石余额按实扣减少', afterBuy.gems < gemsBeforeBuy,
+    `${gemsBeforeBuy} → ${afterBuy.gems}`);
+
+  await page.click('#queueStrip .queueItem');
+  const afterCancelGem = await page.evaluate(() => ({
+    gems: window.__stickWar.state.gems,
+    gold: window.__stickWar.state.gold,
+    queue: document.querySelectorAll('#queueStrip .queueItem').length,
+  }));
+  check('取消训练把宝石原路退回（不洗成金币）',
+    afterCancelGem.queue === 0 &&
+    Math.abs(afterCancelGem.gems - gemsBeforeBuy) < 1e-6 &&
+    afterCancelGem.gold < 2,
+    `gems=${afterCancelGem.gems} gold=${afterCancelGem.gold}`);
+
+  // 把金币恢复，避免影响后续「敌方发育」段的时长
+  await page.evaluate(() => { window.__stickWar.state.gold = 500; });
+
   // v2.7 敌方发育：开局先造矿工 → 真实往返运矿 → 自己花钱升科技，不是按周期刷兵
   // 等待期间 AI 会持续推线，先把雕像血量顶住，避免对局自动结束打断后续可达性断言。
   await page.evaluate(() => { window.__stickWar.state.homeHp = 1e9; });

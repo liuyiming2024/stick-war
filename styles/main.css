@@ -25,6 +25,12 @@ button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 #topBar .enemyDev b{color:#e8c98a}
 #topBar .assetBadge{color:#8fb8c4;font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
 #topBar .assetBadge.ok{color:#79d4b0}#topBar .assetBadge.bad{color:#e2796b}
+#topBar .gemBadge{color:#8fd8ea;white-space:nowrap;font-variant-numeric:tabular-nums}
+#topBar .gemBadge b{color:#dff6ff;font-size:13px}
+.gemBtn{background:linear-gradient(180deg,#1d3a44,#12262d);border-color:#3d7a8c;color:#dff6ff}
+.gemBtn:hover{border-color:#8fd8ea;box-shadow:0 0 0 1px rgba(143,216,234,.3) inset}
+.gemBtn .gemIcon{width:26px;height:26px;filter:drop-shadow(0 0 4px rgba(143,216,234,.35))}
+.gemBtn:active{transform:scale(.94)}
 .camBtn{padding:7px 8px;letter-spacing:0}
 .camBtn[aria-pressed="true"]{opacity:1}
 #canvas{touch-action:none;cursor:grab}
@@ -134,8 +140,8 @@ body:not([data-phase="playing"]) .smallBtn[aria-pressed="true"]{animation-play-s
 
 @media (max-width:420px){
   #topBar{font-size:11px;padding:0 6px;gap:4px}
-  #topBar .clock,#topBar .enemyDev{display:none}
-  #topBar .assetBadge{font-size:10px}
+  #topBar .clock,#topBar .enemyDev,#topBar .assetBadge{display:none}
+  #topBar .gemBadge .gemLabel{display:none}
   .unitIcon,.toolBtn{width:58px;height:60px}
   .panelClose{width:34px;height:34px;top:6px;right:6px}
   #controlBtns{gap:3px;flex-wrap:wrap}

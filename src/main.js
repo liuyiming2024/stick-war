@@ -1,11 +1,11 @@
-import { CONFIG, ASSET_KEYS } from './config.js?v=2.8.0';
-import { createState, resetMatch } from './state.js?v=2.8.0';
-import { createRng } from './rng.js?v=2.8.0';
-import { step, minePositions, setDifficulty, aiGrowthInfo } from './simulation.js?v=2.8.0';
-import { createAssets } from './assets.js?v=2.8.0';
-import { createRenderer } from './render.js?v=2.8.0';
-import { createUI } from './ui.js?v=2.8.0';
-import { createFixedStepDriver } from './timing.js?v=2.8.0';
+import { CONFIG, ASSET_KEYS } from './config.js?v=2.9.0';
+import { createState, resetMatch } from './state.js?v=2.9.0';
+import { createRng } from './rng.js?v=2.9.0';
+import { step, minePositions, setDifficulty, aiGrowthInfo, grantGems } from './simulation.js?v=2.9.0';
+import { createAssets } from './assets.js?v=2.9.0';
+import { createRenderer } from './render.js?v=2.9.0';
+import { createUI } from './ui.js?v=2.9.0';
+import { createFixedStepDriver } from './timing.js?v=2.9.0';
 
 const canvas = document.getElementById('canvas');
 const state = createState();
@@ -47,6 +47,11 @@ const ui = createUI(state, {
   },
   pan(dir) { renderer.panStep(state, dir); },
   toggleFollow() { renderer.setFollow(state, !state.view.follow); },
+  grantGems() {
+    const r = grantGems(state);
+    ui.toast(`+${r.amount} 宝石（当前 ${Math.round(r.total)}）· 免费无限领，可当金币花`);
+    ui.sync();
+  },
   goMenu() {
     state.phase = 'menu';
     ui.showMenu();

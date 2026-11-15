@@ -29,7 +29,7 @@ src/assets.js    10 张 WebP 加载 / 两段式超时 / 染色与闪白预生成
 
 `src/main.js` 只做装配：创建 state / rng / assets / renderer / ui，用 `src/timing.js` 的固定步长累加器驱动 `step`，每帧调一次 `renderer.draw(state, assets)` 和 `ui.sync()`。素材加载完成后才 `enableStart()`；软超时（6s）先放行开战，硬超时（20s）才把没到的图记入缺失。
 
-**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 68 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
+**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 82 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
 
 ## 渲染：位图立绘 + 矢量特效（v2.5）
 
@@ -102,7 +102,7 @@ v2.6 把矢量从「美术」降级为「信息」：删掉岩块晶簇矿堆、
 
 层级（低 → 高）：`canvas/背景 0` → `panelBackdrop 140` → `面板 150` → `controlBtns 160` → `queueStrip 165` → `topBar / bottomBar 170` → `pauseOverlay 180` → `mainMenu 200` → `toast 300`。控制条放在战场右上角（`top:52px`），避免与面板底部关闭按钮抢点击区域。
 
-每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处同样能退。`check-navigation.mjs` 静态守结构，`smoke-pages.mjs` 跑 69 项交互断言。
+每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处同样能退。`check-navigation.mjs` 静态守结构，`smoke-pages.mjs` 跑 76 项交互断言。
 
 ## 配置怎么做到的
 
@@ -136,7 +136,7 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 | `tests/ai-growth.test.mjs` | 开局先补矿工、矿工目标与人口上限、真实运矿交付与自家半场、难度收益倍率、独立 Armory 与升级快照生效、60/120Hz 一致、重开清空 |
 | `scripts/check-assets.mjs` | 10 张 WebP 存在 / 字节数 / WebP 头尺寸、素材键与配置一致、零墙钟/随机/filter、animation 被真实消费、Pages 入口 |
 | `tests/world-waves.test.mjs` | 固定世界与窄屏视口、矿距/中线、负重减速、克制权重与饱和、波次阶段流转/波容/帧率一致/重开 |
-| `scripts/smoke-pages.mjs` | 69 项可达性（含 10 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头按钮/宽屏 resize**、暂停画面静止 / 恢复后继续动画） |
+| `scripts/smoke-pages.mjs` | 76 项可达性（含 10 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头按钮/宽屏 resize**、暂停画面静止 / 恢复后继续动画） |
 
 CI 另做全模块语法检查、配置漂移、导航静态自检、Pages 入口（含 `test -f assets/manifest.json` 与 `assets/*.webp` 数量 = 10）。Playwright 烟测需要本机 Chrome，CI 不跑（用静态自检兜底）。
 

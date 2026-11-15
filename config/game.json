@@ -1,8 +1,8 @@
 {
   "meta": {
     "title": "火柴人战争",
-    "version": "2.8.0",
-    "subtitle": "位图立绘 · 敌方波次指挥与反制"
+    "version": "2.9.0",
+    "subtitle": "位图立绘 · 宝石无限 · 轻松难度"
   },
   "world": {
     "width": 1600,
@@ -39,8 +39,16 @@
     "minerHeightMul": 0.95,
     "canvasBottomReserve": 120
   },
+  "gems": {
+    "label": "宝石",
+    "starting": 999,
+    "grantAmount": 500,
+    "goldPerGem": 1,
+    "autoSpend": true,
+    "_note": "免费且可无限次领取；金币不足时自动按 goldPerGem 抵扣，直接当金币花。领取无冷却、无上限。"
+  },
   "match": {
-    "startingGold": 120,
+    "startingGold": 200,
     "statueHp": 1600,
     "popMax": 20,
     "aiPopMax": 20,
@@ -53,9 +61,9 @@
     "fortArcherRangeRatio": 0.62,
     "fortArcherPerUnits": 3,
     "difficulties": {
-      "normal": { "label": "普通", "aiIncomeMul": 1, "aiSpawnMul": 1, "enemyStatueMul": 1 },
-      "hard": { "label": "困难", "aiIncomeMul": 1.35, "aiSpawnMul": 0.8, "enemyStatueMul": 1.25 },
-      "insane": { "label": "疯狂", "aiIncomeMul": 1.7, "aiSpawnMul": 0.6, "enemyStatueMul": 1.5 }
+      "normal": { "label": "普通", "aiIncomeMul": 0.7, "aiSpawnMul": 1.35, "enemyStatueMul": 0.8 },
+      "hard": { "label": "困难", "aiIncomeMul": 1, "aiSpawnMul": 1.1, "enemyStatueMul": 1 },
+      "insane": { "label": "疯狂", "aiIncomeMul": 1.35, "aiSpawnMul": 0.85, "enemyStatueMul": 1.25 }
     }
   },
   "economy": {
@@ -64,8 +72,8 @@
     "mineArriveEps": 8,
     "carrySpeedMul": 0.72,
     "minMineHomeDistanceRatio": 0.12,
-    "aiStartGold": 120,
-    "aiGoldPerSec": 1.5,
+    "aiStartGold": 100,
+    "aiGoldPerSec": 1,
     "castleGoldPerSec": 1,
     "bagPerLevel": 0.2,
     "pickaxePerLevel": 0.2
@@ -114,15 +122,15 @@
       ["sword", "wizard", 1.3]
     ],
     "wave": {
-      "firstWaveSize": 4,
+      "firstWaveSize": 3,
       "waveSizeGrowth": 1,
-      "maxWaveSize": 9,
-      "buildMinSec": 12,
-      "launchRatio": 0.75,
-      "musterTimeoutSec": 34,
-      "assaultTimeoutSec": 32,
+      "maxWaveSize": 6,
+      "buildMinSec": 18,
+      "launchRatio": 0.8,
+      "musterTimeoutSec": 40,
+      "assaultTimeoutSec": 24,
       "retreatRatio": 0.3,
-      "regroupSec": 7
+      "regroupSec": 10
     },
     "upgradePlan": [
       ["miner", "bag"], ["miner", "pick"],
@@ -246,6 +254,9 @@
     "cape": "rgba(14,20,23,.55)",
     "goldDark": "#a97426",
     "goldLight": "#ffe0a0",
+    "gem": "#8fd8ea",
+    "gemLight": "#dff6ff",
+    "gemDark": "#397d96",
     "rockDark": "#394039",
     "rockLight": "#5d6659",
     "crack": "rgba(12,18,20,.72)",

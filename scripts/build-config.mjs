@@ -134,6 +134,25 @@ for (const [i, entry] of growth.upgradePlan.entries()) {
 if (!(cfg.economy.aiStartGold > 0 && cfg.economy.aiGoldPerSec >= 0)) {
   throw new Error('economy.aiStartGold / aiGoldPerSec 配置不合理');
 }
+// v2.9：宝石免费、无限领取、可当金币花。禁止给领取加冷却或总量上限。
+const gems = cfg.gems;
+for (const k of ['starting', 'grantAmount', 'goldPerGem']) {
+  if (!(gems?.[k] > 0)) throw new Error(`gems.${k} 必须为正数`);
+}
+if (!gems.label || !gems.autoSpend) throw new Error('gems.label / autoSpend 缺失');
+if ('cooldownSec' in gems || 'maxTotal' in gems || 'cost' in gems) {
+  throw new Error('宝石必须免费且无限领取，不允许 cooldownSec/maxTotal/cost');
+}
+if (!(cfg.match.startingGold >= 0)) throw new Error('match.startingGold 配置不合理');
+// 难度整体下调：普通档必须比疯狂档更宽松（收入更低、训练更慢、雕像更薄）。
+const dn = cfg.match.difficulties.normal, di = cfg.match.difficulties.insane;
+if (!(dn.aiIncomeMul < di.aiIncomeMul && dn.aiSpawnMul > di.aiSpawnMul &&
+      dn.enemyStatueMul < di.enemyStatueMul)) {
+  throw new Error('普通难度必须比疯狂难度更宽松');
+}
+if (!(cfg.ai.wave.firstWaveSize <= cfg.ai.wave.maxWaveSize)) {
+  throw new Error('ai.wave.firstWaveSize 不能超过 maxWaveSize');
+}
 // v2.8：波次指挥与针对性反制。反制矩阵必须是 [aiType, playerType, mul>0] 三元组。
 if (!(growth.counterSaturation > 0)) throw new Error('ai.counterSaturation 必须为正');
 if (!Array.isArray(growth.counterMatrix) || growth.counterMatrix.length === 0) {
