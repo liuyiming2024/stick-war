@@ -5,7 +5,7 @@
 // 动画全部作用在位图的变换矩阵或矢量特效上，相位只来自
 // state.elapsed / unit.walkPhase / unit.anim / projectile.age / state.fx，
 // 不允许墙钟时间与随机源，因此暂停时画面完全静止、整局可复现。
-import { CONFIG } from './config.js?v=2.10.0';
+import { CONFIG } from './config.js?v=2.11.0';
 
 const C = CONFIG;
 const P = C.presentation;
@@ -491,6 +491,7 @@ export function createRenderer(canvas) {
       ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.arc(cx, gy - h * 0.5, h * 0.38, 0, TAU); ctx.stroke();
     }
+    drawStatusIcons(state, u, cx, gy, h);
   }
 
   // ── 投射物（v2.6）：统一细线拖尾 + 末端光点，不再画物体造型 ────────────
@@ -507,6 +508,7 @@ export function createRenderer(canvas) {
       arrow: { len: 15, lw: 1.8, dot: 2.6, ring: false },
       rock: { len: 10, lw: 3.2, dot: 4.0, ring: false },
       magic: { len: 20, lw: 2.2, dot: 3.4, ring: true },
+      javelin: { len: 24, lw: 2.6, dot: 3.2, ring: false },
     }[p.kind] ?? { len: 14, lw: 2, dot: 3, ring: false };
     const pulse = 0.5 + 0.5 * Math.sin(t * A.projectileSpinHz * TAU);
 
@@ -564,6 +566,38 @@ export function createRenderer(canvas) {
       out.set(u.id, group.length > 1 ? (rank - (group.length - 1) / 2) * h * 0.22 : 0);
     }
     return out;
+  }
+
+  /** v2.11：状态效果只画小色点 + 眩晕星，属于功能性 HUD，不新增实体插画。 */
+  function drawStatusIcons(state, u, cx, gy, h) {
+    if (!u.fx) return;
+    const t = state.elapsed;
+    const list = [];
+    if (u.fx.burn > 0) list.push(P.burn);
+    if (u.fx.poison > 0) list.push(P.poison);
+    if (u.fx.bleed > 0) list.push(P.bleed);
+    if (u.fx.stun > 0) list.push(P.stun);
+    const by = gy - h - 20;
+    const r = Math.max(2.2, h * 0.020);
+    list.forEach((col, i) => {
+      const x = cx + (i - (list.length - 1) / 2) * r * 2.7;
+      const pulse = 0.65 + 0.35 * Math.sin(t * A.crystalTwinkleHz * TAU + i * 1.6 + u.id);
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = col;
+      disc(ctx, x, by + Math.sin(t * 3 + i) * r * 0.4, r, col);
+      ctx.restore();
+    });
+    if (u.summoned) {
+      // 召唤物：脚下细环 + 头顶菱形，随剩余 ttl 淡出（相位仍取模拟时间）。
+      const fade = Math.min(1, Math.max(0.2, u.ttl / C.skills.summonTtlSec));
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.4 * fade;
+      ctx.strokeStyle = P.summon;
+      ctx.lineWidth = Math.max(1.4, h * 0.012);
+      ctx.beginPath(); ctx.ellipse(cx, gy, h * 0.16, h * 0.045, 0, 0, TAU); ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // v2.10：被接管的单位脚下画一圈脉动环 + 头顶指示菱形。

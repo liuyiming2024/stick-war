@@ -140,8 +140,12 @@ for (const k of ['starting', 'grantAmount', 'goldPerGem']) {
   if (!(gems?.[k] > 0)) throw new Error(`gems.${k} 必须为正数`);
 }
 if (!gems.label || !gems.autoSpend) throw new Error('gems.label / autoSpend 缺失');
-if ('cooldownSec' in gems || 'maxTotal' in gems || 'cost' in gems) {
-  throw new Error('宝石必须免费且无限领取，不允许 cooldownSec/maxTotal/cost');
+// v2.11：每局领取次数有上限，但仍然免费、无冷却；禁止把领取改成付费。
+if (!Number.isInteger(gems.grantLimit) || gems.grantLimit < 1 || gems.grantLimit > 20) {
+  throw new Error('gems.grantLimit 必须是 1..20 的整数（每局领取上限）');
+}
+if ('cooldownSec' in gems || 'cost' in gems) {
+  throw new Error('宝石必须免费且无冷却，不允许 cooldownSec/cost');
 }
 if (!(cfg.match.startingGold >= 0)) throw new Error('match.startingGold 配置不合理');
 // v2.10：单兵指挥。速度倍率 > 0，点击阈值不能大到把「拖动平移」误判成选中。
@@ -152,6 +156,41 @@ for (const k of ['selectRadiusPx', 'moveSpeedMul', 'clickMaxSlopPx', 'clickMaxMs
 if (ctl.enabled !== true) throw new Error('control.enabled 必须为 true');
 if (ctl.clickMaxSlopPx > 24) throw new Error('control.clickMaxSlopPx 过大会与拖动平移冲突');
 if (!(ctl.moveSpeedMul <= 3)) throw new Error('control.moveSpeedMul 不应超过 3 倍');
+
+// v2.11：状态效果 / 弹药 / 兵种技能 / 程序音效 / 战绩存档。
+const fx = cfg.effects;
+for (const k of ['stunSec', 'burnSec', 'burnDps', 'poisonSec', 'poisonDps',
+  'bleedSec', 'bleedDps', 'dotTickSec']) {
+  if (!(fx?.[k] > 0)) throw new Error(`effects.${k} 必须为正数`);
+}
+if (!(fx.poisonSlowMul > 0 && fx.poisonSlowMul <= 1)) {
+  throw new Error('effects.poisonSlowMul 必须落在 (0,1]');
+}
+const am = cfg.ammo;
+if (!(am?.cost > 0)) throw new Error('ammo.cost 必须为正数');
+if (!am.kinds?.[am.default]) throw new Error('ammo.default 必须是 kinds 里的一种');
+for (const [key, k] of Object.entries(am.kinds)) {
+  if (!k.label || !(k.dmgMul > 0)) throw new Error(`ammo.kinds.${key} 配置不合理`);
+  if (k.effect && !['burn', 'poison', 'bleed'].includes(k.effect)) {
+    throw new Error(`ammo.kinds.${key}.effect 未知: ${k.effect}`);
+  }
+}
+const sk = cfg.skills;
+for (const k of ['wizardSplashRadiusPx', 'wizardSplashMul', 'spearThrowIntervalSec',
+  'spearThrowDmgMul', 'spearThrowRangePx', 'summonIntervalSec', 'summonMax',
+  'summonTtlSec', 'summonHpMul', 'summonDmgMul']) {
+  if (!(sk?.[k] > 0)) throw new Error(`skills.${k} 必须为正数`);
+}
+if (sk.wizardSplashMul > 1 || sk.summonHpMul > 1 || sk.summonDmgMul > 1) {
+  throw new Error('溅射/召唤倍率不应超过 1（不能比本体更强）');
+}
+const au = cfg.audio;
+if (!(au?.masterGain > 0 && au.masterGain <= 1 && au.cooldownMs > 0 && au.maxVoices > 0)) {
+  throw new Error('audio 参数不合法');
+}
+if (!cfg.progress?.storageKey) throw new Error('progress.storageKey 缺失');
+if (typeof sk.summonPlayerOnly !== 'boolean') throw new Error('skills.summonPlayerOnly 必须为布尔值');
+
 // 难度整体下调：普通档必须比疯狂档更宽松（收入更低、训练更慢、雕像更薄）。
 const dn = cfg.match.difficulties.normal, di = cfg.match.difficulties.insane;
 if (!(dn.aiIncomeMul < di.aiIncomeMul && dn.aiSpawnMul > di.aiSpawnMul &&

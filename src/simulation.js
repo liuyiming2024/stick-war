@@ -1,7 +1,7 @@
 // 纯逻辑层：完全不碰 DOM / canvas / window。
 // 所有时间量单位为秒，所有速度单位为 px/s；由 main.js 的固定步长驱动。
-import { CONFIG, UNIT_ORDER } from './config.js?v=2.10.0';
-import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.10.0';
+import { CONFIG, UNIT_ORDER } from './config.js?v=2.11.0';
+import { countTeam, pendingTeam, spawnUnit } from './state.js?v=2.11.0';
 
 const C = CONFIG;
 
@@ -52,9 +52,66 @@ function projectileY(state, u) {
 function moveToward(u, tx, dt, eps = 2, snap = false) {
   const d = tx - u.x;
   if (Math.abs(d) <= eps) { if (snap) u.x = tx; return true; }
-  u.x += Math.sign(d) * Math.min(Math.abs(d), u.speed * dt);
+  u.x += Math.sign(d) * Math.min(Math.abs(d), effSpeed(u) * dt);
   if (Math.abs(tx - u.x) <= eps) { if (snap) u.x = tx; return true; }
   return false;
+}
+
+// ── v2.11：状态效果 ─────────────────────────────────────────────────────
+/** 中毒减速是唯一影响移速的状态；所有移动都走这一个口径。 */
+function effSpeed(u) {
+  return u.speed * (u.fx?.poison > 0 ? C.effects.poisonSlowMul : 1);
+}
+
+/** 给目标挂一个状态；重复命中取「剩余时长最大值」，不无限叠加。 */
+function applyStatus(state, target, kind, seconds, events) {
+  if (!target?.fx || !(kind in target.fx)) return;
+  if (target.fx[kind] < seconds) target.fx[kind] = seconds;
+  if (kind === 'stun') state.stats.stuns++;
+  events.push({ type: 'status', kind, team: target.team });
+}
+
+/** DoT 不走 applyDamage：避免克制矩阵/防御倍率重复计算，也避免倒刺无限反弹。 */
+function applyDot(target, dmg, events) {
+  if (!target || target.hp <= 0 || target.inFort) return;
+  target.hp -= dmg;
+  events.push({ type: 'dot', team: target.team, dmg });
+}
+
+/**
+ * 每 dotTickSec 结算一次 DoT（而不是每帧），保证 60/120Hz 结果一致。
+ * fx 各状态按秒递减；暂停时 step 不跑，画面与状态一起冻结。
+ */
+function tickEffects(state, dt, events) {
+  const E = C.effects;
+  for (const u of state.units) {
+    if (u.hp <= 0) continue;
+    u.dotAcc += dt;
+    const tick = u.dotAcc >= E.dotTickSec;
+    if (tick) u.dotAcc -= E.dotTickSec;
+    let dmg = 0;
+    if (u.fx.burn > 0) { u.fx.burn = Math.max(0, u.fx.burn - dt); if (tick) dmg += E.burnDps * E.dotTickSec; }
+    if (u.fx.poison > 0) { u.fx.poison = Math.max(0, u.fx.poison - dt); if (tick) dmg += E.poisonDps * E.dotTickSec; }
+    if (u.fx.bleed > 0) { u.fx.bleed = Math.max(0, u.fx.bleed - dt); if (tick) dmg += E.bleedDps * E.dotTickSec; }
+    if (u.fx.stun > 0) u.fx.stun = Math.max(0, u.fx.stun - dt);
+    if (dmg > 0) {
+      applyDot(u, dmg, events);
+      state.stats.dotTicks++;
+      state.stats.dotDamage += dmg;
+    }
+  }
+}
+
+/** 召唤物 ttl 递减，到点直接移除（不计入阵亡统计之外的任何口径）。 */
+function tickSummons(state, dt, events) {
+  for (const u of state.units) {
+    if (!u.summoned || u.hp <= 0) continue;
+    u.ttl -= dt;
+    if (u.ttl <= 0) {
+      u.hp = 0;
+      events.push({ type: 'summonExpire', team: u.team });
+    }
+  }
 }
 
 /** 原版的克制关系：远程打巨人和雕像减伤、矛士盾挡箭、弓箭手克剑士。 */
@@ -103,17 +160,81 @@ function makeProjectile(state, u, target, overrides = {}) {
     attackerType: u.type,
     projectileKind: u.projectile,
     vsStatueMul: u.projectile ? C.combat.damageMatrix.rangedVsStatue : 1,
+    // v2.11：命中后要施加的状态 / 溅射 / 眩晕，全部由发射方决定。
+    ammoEffect: null,
+    ammoDmgMul: 1,
+    splash: false,
+    stun: false,
     ...overrides,
   };
 }
 
+/** 只有我方弓箭手与城堡射手吃全局弹药；AI 永远普通箭，避免难度被玩家配置带偏。 */
+function ammoFor(state, u, kind) {
+  if (u.team !== 0 || kind !== 'arrow' || state.ammo === 'plain') return null;
+  return C.ammo.kinds[state.ammo] ?? null;
+}
+
 function fire(state, u, target, events) {
   if (u.projectile) {
-    state.projectiles.push(makeProjectile(state, u, target));
-    events.push({ type: 'shoot', kind: u.projectile });
+    const am = ammoFor(state, u, u.projectile);
+    const isMagic = u.type === 'wizard';
+    const p = makeProjectile(state, u, target, {
+      ammoEffect: am?.effect ?? null,
+      ammoDmgMul: am?.dmgMul ?? 1,
+      splash: isMagic && C.skills.wizardStun,
+      stun: isMagic && C.skills.wizardStun,
+    });
+    state.projectiles.push(p);
+    events.push({ type: 'shoot', kind: u.projectile, ammo: state.ammo });
   } else {
     applyDamage(target, u.dmg, events, u.type, null);
   }
+}
+
+/** 原版 Spearton 投矛：独立于近战冷却的一次远程重击。 */
+function trySpearThrow(state, u, dt, events) {
+  if (u.type !== 'spear') return;
+  u.throwCd -= dt;
+  if (u.throwCd > 0) return;
+  const dir = u.team === 0 ? 1 : -1;
+  const target = state.units.find((o) =>
+    o.team !== u.team && o.hp > 0 && !o.inFort &&
+    (o.x - u.x) * dir > 0 && Math.abs(o.x - u.x) <= C.skills.spearThrowRangePx);
+  if (!target) return;                       // 没目标就不重置，等敌人进入射程
+  u.throwCd = C.skills.spearThrowIntervalSec;
+  state.projectiles.push(makeProjectile(state, u, target, {
+    kind: 'javelin',
+    dmg: u.dmg * C.skills.spearThrowDmgMul,
+    projectileKind: 'javelin',
+  }));
+  state.stats.spearThrows++;
+  u.atkAnim = C.combat.attackAnimSec;
+  events.push({ type: 'spearThrow', team: u.team });
+}
+
+/** 原版 Magikill 召唤：弱化剑士，占人口但不计入出兵统计，ttl 到点消失。 */
+function trySummon(state, u, dt, events) {
+  if (u.type !== 'wizard' || u.summoned) return;
+  if (C.skills.summonPlayerOnly && u.team !== 0) return;
+  u.summonCd -= dt;
+  if (u.summonCd > 0) return;
+  const alive = state.units.filter((o) => o.summoned && o.team === u.team && o.hp > 0).length;
+  if (alive >= C.skills.summonMax) return;
+  u.summonCd = C.skills.summonIntervalSec;
+  const minion = spawnUnit(state, 'sword', u.team, null);
+  if (u.team === 0) state.stats.playerSpawned--;
+  else state.stats.aiSpawned--;
+  const base = C.units.sword;
+  minion.summoned = true;
+  minion.ttl = C.skills.summonTtlSec;
+  minion.hp = base.hp * C.skills.summonHpMul;
+  minion.maxHp = minion.hp;
+  minion.dmg = base.dmg * C.skills.summonDmgMul;
+  minion.x = Math.min(state.w, Math.max(0, u.x + (u.team === 0 ? 42 : -42)));
+  minion.y = u.y;
+  state.stats.summons++;
+  events.push({ type: 'summon', team: u.team });
 }
 
 /**
@@ -123,13 +244,16 @@ function fire(state, u, target, events) {
 function moveChampion(state, u, dt) {
   const axis = state.control.axis;
   if (!axis) return;
-  const speed = u.speed * C.control.moveSpeedMul;
+  const speed = effSpeed(u) * C.control.moveSpeedMul;
   const nx = Math.min(state.w, Math.max(0, u.x + axis * speed * dt));
   state.control.distance += Math.abs(nx - u.x);
   u.x = nx;
 }
 
 function tickFighter(state, u, dt, events, manual = false) {
+  // v2.11：原版兵种技能独立于普通攻击冷却，且接管单位同样保留。
+  trySpearThrow(state, u, dt, events);
+  trySummon(state, u, dt, events);
   const line = u.team === 0 ? statueRightLine(state) : statueLeftLine(state);
   const found = nearestEnemy(state, u);
   const target = found?.unit ?? null;
@@ -175,7 +299,7 @@ function tickMiner(state, u, dt, events, diff) {
   const home = minerHomeX(state, u.team);
   // v2.8：背着矿走得慢，回营这一段才像「运」而不是瞬移。
   // 矿点也已从贴着雕像移到中场方向，最短单程 ≥ world.width*minMineHomeDistanceRatio。
-  const speed = u.speed * (u.carry > 0 ? C.economy.carrySpeedMul : 1);
+  const speed = effSpeed(u) * (u.carry > 0 ? C.economy.carrySpeedMul : 1);
   let remaining = dt;
   let guard = 0;
   while (remaining > 1e-9 && guard++ < 8) {
@@ -241,7 +365,24 @@ function tickProjectiles(state, dt, events) {
     p.age += dt;
     p.ttl -= dt;
     if (dist <= Math.max(travel, C.combat.projectileHitRadius)) {
-      if (target) applyDamage(target, p.dmg, events, p.attackerType, p.projectileKind);
+      if (target) {
+        applyDamage(target, p.dmg * p.ammoDmgMul, events, p.attackerType, p.projectileKind);
+        const secs = { burn: C.effects.burnSec, poison: C.effects.poisonSec, bleed: C.effects.bleedSec };
+        if (p.ammoEffect && secs[p.ammoEffect]) {
+          applyStatus(state, target, p.ammoEffect, secs[p.ammoEffect], events);
+        }
+        if (p.stun) applyStatus(state, target, 'stun', C.effects.stunSec, events);
+        if (p.splash) {
+          // 原版 Magikill 法球：命中点附近一片敌人吃溅射，不再二次挂眩晕。
+          for (const o of state.units) {
+            if (o.team !== target.team || o.hp <= 0 || o.id === target.id || o.inFort) continue;
+            if (Math.abs(o.x - target.x) <= C.skills.wizardSplashRadiusPx) {
+              applyDamage(o, p.dmg * C.skills.wizardSplashMul, events, p.attackerType, null);
+            }
+          }
+          events.push({ type: 'splash', team: p.team });
+        }
+      }
       p.dead = true;
     } else if (dist > 0) {
       p.x += (dx / dist) * travel;
@@ -273,8 +414,11 @@ function tickFortArrows(state, dt, events) {
     team: 0, type: 'fort', projectile: 'arrow', dmg: C.match.fortArcherDamage,
     x: originX, y: state.h * C.layout.groundRatio,
   };
+  const am = C.ammo.kinds[state.ammo];
   state.projectiles.push(makeProjectile(state, shooter, target, {
     x: originX, y: state.h * C.layout.groundRatio - state.h * C.layout.unitHeightRatio,
+    ammoEffect: am?.effect ?? null,
+    ammoDmgMul: am?.dmgMul ?? 1,
   }));
   state.stats.fortArrows++;
   events.push({ type: 'fortArrow', target: target.type });
@@ -317,7 +461,7 @@ function enqueue(state, type, team, upgrades, events,
   return t;
 }
 
-// ── v2.9：宝石 = 免费、无限、可当金币花 ────────────────────────────────
+// ── 宝石：每局免费领 grantLimit 次、可当金币花 ─────────────────────────
 /** 可购买力：金币 + 宝石按 goldPerGem 折算。UI 按钮禁用与下单共用这一个口径。 */
 export function canAfford(state, amount) {
   const rest = Math.max(0, amount - Math.min(state.gold, amount));
@@ -325,12 +469,21 @@ export function canAfford(state, amount) {
   return state.gems + 1e-9 >= gemsNeeded;
 }
 
-/** 领取宝石：无冷却、无上限、不花任何东西，可无限次调用。 */
+/** 领取宝石：免费、无冷却，但每局最多 grantLimit 次；重开由 resetMatch 恢复。 */
 export function grantGems(state) {
+  const used = state.stats.gemsGranted;
+  const limit = C.gems.grantLimit;
+  if (used >= limit) {
+    return { ok: false, reason: `本局宝石已领完（${limit}/${limit}）`, used, limit, remaining: 0 };
+  }
   const amount = C.gems.grantAmount;
   state.gems += amount;
   state.stats.gemsGranted++;
-  return { ok: true, amount, total: state.gems };
+  return {
+    ok: true, amount, total: state.gems,
+    used: state.stats.gemsGranted, limit,
+    remaining: limit - state.stats.gemsGranted,
+  };
 }
 
 /**
@@ -628,6 +781,8 @@ export function step(state, dt, rng) {
     if (u.hp <= 0) continue;
     const udt = freshTime.get(u.id) ?? dt;
     const x0 = u.x;
+    // v2.11：眩晕期间不动、不攻击、不挖矿、不召唤；冷却已在上面统一递减。
+    if (u.fx?.stun > 0) { u.moving = false; continue; }
     // v2.10：玩家接管优先于攻/守/驻三条指令——手动控制就该说了算。
     const isChamp = C.control.enabled && state.control.championId === u.id && u.team === 0;
     if (isChamp) {
@@ -651,6 +806,8 @@ export function step(state, dt, rng) {
 
   tickFortArrows(state, dt, events);
   tickProjectiles(state, dt, events);
+  tickEffects(state, dt, events);
+  tickSummons(state, dt, events);
   separate(state.units, dt);
 
   // filter 而非遍历中 splice：渲染排序不再能改变物理遍历顺序。
@@ -678,6 +835,43 @@ export function step(state, dt, rng) {
 }
 
 /** 下单即扣钱、进入训练队列；训练完成才出场。升级在下单时快照。 */
+// ── v2.11：弹药切换与状态汇总 ───────────────────────────────────────────
+/** 全局切换我方箭矢；走与出兵/升级同一个 pay()，因此可用无限宝石兜底。 */
+export function setAmmo(state, kind) {
+  if (state.phase !== 'playing') return { ok: false, reason: '当前不能切换弹药' };
+  const cfg = C.ammo.kinds[kind];
+  if (!cfg) return { ok: false, reason: '未知弹药' };
+  if (state.ammo === kind) return { ok: true, unchanged: true, label: cfg.label };
+  const paid = pay(state, C.ammo.cost);
+  if (!paid) return { ok: false, reason: '金币/宝石不足，点底栏宝石可免费领' };
+  state.ammo = kind;
+  state.stats.ammoSwitches++;
+  return { ok: true, label: cfg.label, effect: cfg.effect, paid };
+}
+
+/** 顶栏、弹药面板、结算与烟测共用；统计数字全部来自 state，不另起炉灶。 */
+export function effectsInfo(state) {
+  const active = { burn: 0, poison: 0, bleed: 0, stun: 0 };
+  for (const u of state.units) {
+    if (u.hp <= 0 || !u.fx) continue;
+    for (const k of Object.keys(active)) if (u.fx[k] > 0) active[k]++;
+  }
+  return {
+    ammo: state.ammo,
+    ammoLabel: C.ammo.kinds[state.ammo].label,
+    ammoCost: C.ammo.cost,
+    active,
+    stats: {
+      ammoSwitches: state.stats.ammoSwitches,
+      spearThrows: state.stats.spearThrows,
+      summons: state.stats.summons,
+      stuns: state.stats.stuns,
+      dotTicks: state.stats.dotTicks,
+      dotDamage: state.stats.dotDamage,
+    },
+  };
+}
+
 // ── v2.10：单兵指挥 ─────────────────────────────────────────────────────
 /** 顶栏/指挥条/结算/烟测共用的唯一口径。 */
 export function championInfo(state) {

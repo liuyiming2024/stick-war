@@ -1,7 +1,7 @@
-# 火柴人战争（网页版 v2.10.0）
+# 火柴人战争（网页版 v2.11.0）
 
 > 从「一个 18KB 的 `index.html` 包办一切」重构成模块化、可配置、可测试、可继续迭代的静态游戏。
-> v2.9 宝石无限 / 难度下调 → **v2.10：单兵指挥**。点战场接管任意一个我方单位，方向键或按住 ◀▶ 手动走位，攻击与拆雕像仍自动；指挥条自带 ×、Esc 与点空处都能退。补齐原版最核心的缺失机制，不改数值难度，只多一层微操。
+> v2.10 单兵指挥 → **v2.11：状态效果 / 原版兵种技能 / 程序音效 / 战绩存档**，并按反馈把「宝石无限领」改成**每局最多 2 次**。这一版将作为后续「三国策」大地图里「攻城时内嵌的战斗子模块」基线。
 
 [![CI](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml/badge.svg)](https://github.com/liuyiming2024/stick-war/actions/workflows/ci.yml)
 
@@ -21,6 +21,36 @@ python3 -m http.server 4173
 ```
 
 无运行时构建步骤，改完刷新即可；只有改 `config/game.json` 才需要 `npm run build` 重新生成 `src/config.generated.js` 与 ESM 版本指纹。10 张 WebP 合计 **289404 字节 / 282.6 KiB**，两段式超时（9s / 26s）+ 单次失败重试放行后即可开战，弱网下晚到的图片会补登记；顶栏 `位图 10/10` 徽标可随时核验。
+
+## v2.11：状态效果、音效、存档，以及宝石限领 2 次
+
+### 宝石：从「无限」改为「每局 2 次」
+
+按反馈收紧。`gems.grantLimit = 2`，`grantGems()` 第 3 次起返回 `{ok:false, reason:'本局宝石已领完（2/2）'}`，不加宝石、不动金币、不计数。`stats.gemsGranted` 只对局内生效，`resetMatch()` 通过 `createState()` 整体重建 → 新的一局又有 2 次；**不写进 localStorage**，不是账号级配额。仍然免费、无冷却；`build-config.mjs` 继续拒绝 `cooldownSec` / `cost`。
+
+UI 上是真 `.disabled`（不只是置灰），按钮文案 `领宝石 0/2 → 1/2 → 已领完 2/2`；顶栏保留 `宝石 999` 数值。开局 999 + 2×500 仍足够买满最贵兵种与全部 8 级升级（回归测试守这条），不会把人卡死。
+
+### 状态效果 / 箭矢 / 原版兵种技能
+
+| 层 | 内容 |
+| --- | --- |
+| `effects` | 灼烧 / 中毒（DoS + 减速 0.62×）/ 流血 / 眩晕；DoT 每 `dotTickSec=0.25` 结算一次而非每帧，60/120Hz 一致；暂停时 `step` 不跑，状态与画面一起冻结 |
+| `ammo` | 普通/火/毒/倒刺四箭，全局切换我方弓箭手 + 城堡射手，走与出兵同一个 `pay()`（可用宝石）；AI 永远普通箭，避免玩家配置把难度带偏 |
+| `skills` | 巫师法球命中眩晕 + 半径 58px 溅射、定期召唤弱化剑士（占人口、ttl 12s、不计出兵统计、`summonPlayerOnly`）；矛士每 6s 投一次标枪 |
+
+`tickFighter(..., manual=true)` 的单兵指挥路径同样挂技能；`effSpeed(u)` 是移速唯一口径，中毒减速对自动推进、手动走位、矿工背矿同时生效。渲染层只加状态色点、眩晕星与召唤环（功能性 HUD，相位仍取 `state.elapsed`），`poly()` 上限守着，不新增实体插画。
+
+### 程序音效与战绩存档
+
+`src/audio.js`：Web Audio 振荡器 + 复用白噪声缓冲，**零外部文件、零网络请求**；首次用户手势 `resume()`；只消费 `step()` 的 `events`，不进纯逻辑层；同名事件 `cooldownMs` 限流、`maxVoices` 限并发。噪声用线性同余确定性生成，不引入运行时随机源。
+
+`src/progress.js`：`localStorage` 存胜/负/对局数/最快胜利/累计消耗宝石/上次难度/静音；无痕或配额满自动降级内存，不报错。终局 `progress.record(state, e.result)` 先于 `showEnd()` 写入，结算页才能读到刷新后的最佳。
+
+### 面板可达性
+
+新增「箭矢切换」「战绩存档」两个面板，四个面板共用一个互斥 `openPanel()`，每个都有 `×` + 底部关闭按钮 + `Esc` + 点遮罩四条退路。战绩面板在主菜单也能打开：临时解除 `#gameUI` 隐藏并用 `body.menu-stats` 只放行面板与遮罩（不露出战场 HUD），关闭时还原——否则面板会被 `hidden` 的父容器挡住。
+
+**验证**：113 个单测（新增 `effects.test.mjs` 16 项）、107 项 Playwright 断言（含主菜单战绩 ×/Esc、箭矢四卡与四条退路、音效开关、宝石领满 2 次后按钮真禁用 + 绕过 UI 直接调逻辑层仍被拒）、素材/确定性/导航静态自检、密钥扫描，全绿。
 
 ## v2.10：单兵指挥（原版最核心的缺失机制）
 
@@ -55,7 +85,7 @@ python3 -m http.server 4173
 ### 实测
 
 ```
-96 单测 / 85 项 Playwright 断言全绿
+96 单测 / 85 项 Playwright 断言全绿（v2.10 当时）
 按住 ▶ 320ms：矿工 x 120 → 145.3
 方向键 ← 320ms：145.3 → 121.3，松开 axis=0
 Esc / × / 点空处：三条退路逐一验证
@@ -64,7 +94,7 @@ Esc / × / 点空处：三条退路逐一验证
 
 如实说一句边界：手动接管是**微操层，不是单刷按钮**。单个单位一路直冲仍会被敌方波次拦截，`tickFighter` 的「范围内有目标就先打人」保持原版口径；想赢还是得配合出兵。固守模式下把单位手动推过驻守线可以做单点骚扰，但不会凭空多出伤害。
 
-## v2.9：宝石无限，难度降下来
+## v2.9：宝石与难度（当时为无限领，v2.11 起改为每局 2 次）
 
 反馈是两条：**难度太高**，以及要一种「叫宝石的免费金币」——免费送、无限领、能直接当金币花。
 
@@ -75,11 +105,11 @@ Esc / × / 点空处：三条退路逐一验证
 | 字段 | 值 | 含义 |
 | --- | --- | --- |
 | `starting` | 999 | 开局就送，不用做任何事 |
-| `grantAmount` | 500 | 底栏「领宝石」每次 +500 |
+| `grantAmount` | 500 | 底栏「领宝石」每次 +500（v2.11 起每局最多 2 次） |
 | `goldPerGem` | 1 | 1 颗 = 1 金币 |
 | `autoSpend` | true | 金币不足自动抵扣 |
 
-`grantGems(state)` 无冷却、无总量上限、不花任何东西，可以无限次调用。`build-config.mjs` 会**静态拒绝** `cooldownSec` / `maxTotal` / `cost` 这类字段，防止后来人把「免费无限」改回付费或限次。
+`grantGems(state)` 免费、无冷却、不花任何东西，但**每局最多 2 次**（`gems.grantLimit`）；重开由 `resetMatch()` 恢复。`build-config.mjs` 会**静态拒绝** `cooldownSec` / `maxTotal` / `cost` 这类字段，防止后来人把「每局限领 2 次」改回付费或限次。
 
 支付收敛到一个 `pay(state, amount)`：优先扣金币，差额按 `goldPerGem` **向上取整**成整颗宝石补足。`spawnPlayer()` 与 `doUpgrade()` 共用它，`canAfford()` 是 UI 按钮禁用与下单的同一个判定口径——所以金币为 0 时兵种栏不会灰掉，点一下照样下单。
 
@@ -287,8 +317,9 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 | 无超时、无脏检查 | 软/硬两段超时、UI 数值脏检查、支持 DPR |
 | manifest 有 `png/jpg` 幽灵字段、体积口径不准 | `check-assets.mjs` 逐项校验字节数并解析 WebP 头校验画布尺寸：**289404 字节 / 282.6 KiB / 10 文件，10/10 通过** |
 | 全内联 onclick、字符串拼 handler | 统一 `addEventListener`，兵种栏/商店/升级由 `icons.js` 生成 `<img>`，工具按钮用内联 SVG |
-| 无配置、无测试、无 CI | 单一配置源 + **96 个单测** + GitHub Actions |
-| 金币卡死、难度陡峭 | 宝石免费无限领 + `canAfford/pay` 统一抵扣 + 三档倍率与波次整体放缓、起始金币 200 |
+| 无配置、无测试、无 CI | 单一配置源 + **113 个单测** + GitHub Actions |
+| 金币卡死、难度陡峭 | 宝石每局免费领 2 次 + `canAfford/pay` 统一抵扣 + 三档倍率与波次整体放缓、起始金币 200 |
+| 只有单调的普通箭、巫师没有技能、无音效无记录 | 四种状态箭矢 + 眩晕/溅射/召唤/投矛 + 程序合成音效 + 本机战绩存档 |
 | 单位只能跟着 AI 自动跑，没有微操 | 点战场接管单兵，方向键/按住按钮走位，× / Esc / 点空处三条退路 |
 | 全战场只有一个黄圈当金矿 | 双侧各 3 个位图金矿插画，只挖自家半场；矿点远离雕像、背矿减速，一趟往返约 12 秒 |
 | 手机把整场压进一屏、影子发虚 | 固定 1600×800 逻辑世界 + 可拖动/跟随镜头 + DPR 画布 + 双层钳制柔影 |
@@ -300,7 +331,7 @@ insane 同期：战斗兵 13、科技 5 级、累计采矿 1316 金
 index.html                    页面骨架
 styles/main.css               暗色 HUD、面板层级 z-index 约定、位图/SVG 动画与暂停冻结
 assets/                       10 张 WebP + manifest.json
-config/game.json              ★ 唯一配置源（含 control 单兵指挥、gems 宝石、world 视口、ai 波次/反制、assets 超时、animation、presentation）
+config/game.json              ★ 唯一配置源（含 effects/ammo/skills/audio/progress、control、gems、world、ai 波次、assets、animation、presentation）
 config/README.md              字段含义
 src/config.generated.js       生成物，必须提交
 src/config.js                 配置访问、ASSET_KEYS / 带版本指纹的 assetPath、升级维度与倍率派生
@@ -317,9 +348,11 @@ scripts/build-config.mjs      配置生成 + 结构校验
 scripts/stamp-cache.mjs       给 ESM 入口与所有相对 import 加 ?v=<version> 缓存指纹（幂等）
 scripts/check-assets.mjs      素材清单 / WebP 头 / 渲染确定性 / 缓存指纹静态自检
 scripts/check-navigation.mjs  退出通道静态自检
-scripts/smoke-pages.mjs       Playwright 可达性烟测（85 项）
+scripts/smoke-pages.mjs       Playwright 可达性烟测（107 项）
+src/audio.js                  Web Audio 程序合成音效，只消费 step() 的 events
+src/progress.js               localStorage 战绩存档，失败降级内存
 scripts/serve.mjs             零依赖静态服务
-tests/                         node:test，96 个用例（9 个文件；含 world-waves / gems / control.test.mjs）
+tests/                         node:test，113 个用例（10 个文件；含 world-waves / gems / control / effects.test.mjs）
 docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 .github/workflows/ci.yml       CI
 ```
@@ -331,8 +364,8 @@ docs/ARCHITECTURE.md          分层、状态机、时间约定、扩展点
 ```bash
 vim config/game.json
 npm run build              # 重新生成 src/config.generated.js
-npm run smoke              # 可选：本机 Chrome 跑 85 项可达性断言
-npm run check              # 生成 + 96 单测 + 素材/确定性静态自检
+npm run smoke              # 可选：本机 Chrome 跑 107 项可达性断言
+npm run check              # 生成 + 113 单测 + 素材/确定性静态自检
 ```
 
 `src/config.generated.js` 与所有带 `?v=` 指纹的 `src/*.js` / `index.html` 必须一起提交（Pages 直出静态文件）。**改 `meta.version` 后不跑 `npm run build` 会让线上继续吃旧缓存**——CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 守住一致性。加新兵种要同时补 `assets/<key>.webp` 与 `assets/manifest.json`，UI 与渲染会自动长出；改动画节奏只动 `animation` 段，改配色只动 `presentation` 段。
@@ -363,10 +396,10 @@ npm run check              # 生成 + 96 单测 + 素材/确定性静态自检
 「可达」= **每个能进的层都能出、每份资源都能取到、暂停时画面真的静止**：
 
 ```bash
-npm run smoke     # 需要本机 Chrome；自动起静态服务，85 项断言
+npm run smoke     # 需要本机 Chrome；自动起静态服务，107 项断言
 ```
 
-覆盖：首页 200、10 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、**逻辑世界 1600×800 / 窄屏只显示一段 / 镜头可平移 / Canvas 按 DPR 分配 / 矿点不贴回营点 / 金矿用位图插画 / `位图 10/10` 徽标 / 跟随开关 / 宽屏 resize 不改世界尺寸**、训练队列下单/退款、**顶栏宝石 / 连点 6 次免费领取全生效 / 金币清零后按钮仍可点 / `paid` 实扣构成 / 取消原路退回**、**单兵指挥：选中 / 指挥条与兵种名 / 可见 × / 按住 ▶ 右移 / 方向键 ← 左移且松开归零 / Esc、×、点空处三条退路**、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
+覆盖：首页 200、10 张 WebP 全部 200、素材缺失数 0、兵种栏/商店/升级 7+7+7 张位图已解码、工具按钮 2 个内联 SVG、Canvas 非空绘制、6 个矿点、难度三档、**逻辑世界 1600×800 / 窄屏只显示一段 / 镜头可平移 / Canvas 按 DPR 分配 / 矿点不贴回营点 / 金矿用位图插画 / `位图 10/10` 徽标 / 跟随开关 / 宽屏 resize 不改世界尺寸**、训练队列下单/退款、**顶栏宝石 / 免费领 2 次生效 / 第 3 次按钮真禁用且逻辑层仍拒 / 金币清零后按钮仍可点 / `paid` 实扣构成 / 取消原路退回**、**单兵指挥：选中 / 指挥条与兵种名 / 可见 × / 按住 ▶ 右移 / 方向键 ← 左移且松开归零 / Esc、×、点空处三条退路**、驻堡切换、**敌方矿工补到目标数 / 只在自家半场 / 真实交付产生收入 / 顶栏发育指标 / 不污染玩家 Armory / 自己花钱买科技**、商店与升级的全部退出通道（`×`/`Esc`/遮罩/底部按钮）、面板不叠层、矿工升级维度、**暂停前后两次 `toDataURL()` 完全一致且 CSS 动画冻结**、恢复后画面继续动画、结算统计与返回、菜单按钮。
 
 CI 里跑 `scripts/check-navigation.mjs` 与 `scripts/check-assets.mjs` 做静态兜底（不需要浏览器）。
 
@@ -377,7 +410,8 @@ Pages 配置为 **legacy / `main` 分支 / 根目录**，push 到 `main` 自动�
 ## 已知限制
 
 - 升级在**训练下单时快照**，已出场单位不回溯加成
-- 单兵指挥是「接管一个单位」，没有多选框选、编队与路径点；也没有战役地图/简报、存档、音效、多人
+- 单兵指挥是「接管一个单位」，没有多选框选、编队与路径点；存档只有本机战绩，没有战役地图/简报、云存档、多人
+- 音效是程序合成的单音与短琶音，没有 BGM 与空间音频；箭矢切换是全局的，不能按兵种分别配
 - Magikill 眩晕与召唤、Spearton 投矛、箭矢属性升级（火/毒/倒刺）尚未实现
 - AI 会按玩家兵种调权重、按波次进攻，但**不做目标选择、集火与撤退路径规划**
 - 仓库还没有 LICENSE

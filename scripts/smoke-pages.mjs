@@ -104,6 +104,23 @@ try {
   const diffCount = await page.locator('#difficulty option').count();
   check('难度下拉含三档', diffCount === 3, `${diffCount} 项`);
   await page.selectOption('#difficulty', 'hard');
+
+  // v2.11 战绩存档：主菜单也能进，且 × / Esc 都能退回主菜单
+  check('主菜单有战绩入口', await page.isVisible('#statsBtn'));
+  await page.click('#statsBtn');
+  check('战绩面板可达', await page.isVisible('#statsPanel'));
+  check('战绩面板有可见的 ×', await page.isVisible('#closeStatsX'));
+  const statCells = await page.locator('#statsBody .statCell').count();
+  check('战绩面板渲染 6 项统计', statCells === 6, `${statCells} 项`);
+  check('打开战绩时主菜单收起（面板不被盖住）', !(await page.isVisible('#mainMenu')));
+  await page.click('#closeStatsX');
+  check('战绩 × 可退回主菜单',
+    !(await page.isVisible('#statsPanel')) && await page.isVisible('#mainMenu'));
+  await page.click('#statsBtn');
+  await page.keyboard.press('Escape');
+  check('主菜单下 Esc 也能退出战绩',
+    !(await page.isVisible('#statsPanel')) && await page.isVisible('#mainMenu'));
+
   await page.click('#startBtn');
   check('主菜单 → 对局', await page.isVisible('#gameUI') && !(await page.isVisible('#mainMenu')));
   check('难度选择已生效', (await page.evaluate(() => window.__stickWar.state.difficulty)) === 'hard');
@@ -194,16 +211,27 @@ try {
   check('顶栏展示宝石资源（窄屏保留数值）', Number(gemNumber) > 0, `宝石=${gemNumber}`);
   check('底栏有领宝石入口', await page.isVisible('#gemBtn'));
   const gem0 = await page.evaluate(() => window.__stickWar.state.gems);
-  for (let i = 0; i < 6; i++) await page.click('#gemBtn');
+  for (let i = 0; i < 2; i++) await page.click('#gemBtn');
   const gemAfterGrants = await page.evaluate(() => ({
     gems: window.__stickWar.state.gems,
     grants: window.__stickWar.state.stats.gemsGranted,
     gold: window.__stickWar.state.gold,
   }));
-  check('宝石免费且无冷却：连点 6 次全部生效',
-    gemAfterGrants.grants === 6 &&
-    Math.abs(gemAfterGrants.gems - (gem0 + 6 * 500)) < 1e-6,
+  check('宝石免费领 2 次全部生效',
+    gemAfterGrants.grants === 2 &&
+    Math.abs(gemAfterGrants.gems - (gem0 + 2 * 500)) < 1e-6,
     `${gem0} → ${gemAfterGrants.gems}，领取 ${gemAfterGrants.grants} 次`);
+  check('领满 2 次后按钮真禁用（不是只置灰）',
+    await page.locator('#gemBtn').isDisabled());
+  check('按钮显示 2/2 已领完',
+    (await page.locator('#gemBtnLabel').innerText()).includes('2/2'),
+    await page.locator('#gemBtnLabel').innerText());
+  // 绕过 UI 直接调逻辑层也必须被拦住，避免只是前端禁用。
+  const third = await page.evaluate(() => window.__stickWar.grantGems());
+  check('绕过 UI 直接调逻辑层，第 3 次仍被拒绝', third.ok === false &&
+    third.remaining === 0, JSON.stringify(third));
+  check('被拒后宝石余额不变',
+    (await page.evaluate(() => window.__stickWar.state.gems)) === gemAfterGrants.gems);
 
   // 把金币清零，验证出兵自动走宝石抵扣
   await page.evaluate(() => { window.__stickWar.state.gold = 0; });
@@ -378,6 +406,44 @@ try {
   check('切换面板不会双层叠加', !stacked);
   await page.keyboard.press('Escape');
   check('切换后仍能一次退出', !(await page.isVisible('#shopPanel')) && !(await page.isVisible('#upgradePanel')));
+
+  // v2.11 箭矢面板：可达、能切换、四条退出通道、顶栏同步
+  await page.evaluate(() => { window.__stickWar.state.gold = 1000; });
+  await page.click('#ammoBtn');
+  check('箭矢面板可达', await page.isVisible('#ammoPanel'));
+  check('箭矢面板有可见的 ×', await page.isVisible('#closeAmmoX'));
+  const ammoCards = await page.locator('#ammoGrid .ammoItem').count();
+  check('箭矢面板渲染 4 种弹药', ammoCards === 4, `${ammoCards} 种`);
+  await page.locator('#ammoGrid .ammoItem').nth(1).click();   // 火箭
+  const ammoAfter = await page.evaluate(() => ({
+    ammo: window.__stickWar.state.ammo,
+    badge: document.getElementById('ammoBadge').textContent,
+    gold: window.__stickWar.state.gold,
+    fx: window.__stickWar.effects(),
+  }));
+  check('切换箭矢生效且顶栏徽标同步',
+    ammoAfter.ammo === 'fire' && ammoAfter.badge.includes('火箭'),
+    `${ammoAfter.ammo} / ${ammoAfter.badge}`);
+  check('切换箭矢真扣了金币', ammoAfter.gold < 1000, `剩余 ${ammoAfter.gold.toFixed(1)}`);
+  check('状态效果口径可读', ammoAfter.fx.ammo === 'fire' &&
+    'active' in ammoAfter.fx && 'stats' in ammoAfter.fx);
+  await page.click('#closeAmmoX');
+  check('箭矢 × 可退出', !(await page.isVisible('#ammoPanel')));
+  await page.click('#ammoBtn');
+  await page.keyboard.press('Escape');
+  check('箭矢 Esc 可退出', !(await page.isVisible('#ammoPanel')));
+  await page.click('#ammoBtn');
+  await page.mouse.click(24, 110);
+  check('箭矢点外部可退出', !(await page.isVisible('#ammoPanel')));
+
+  // v2.11 音效与存档模块：开关可切、模块已装配
+  check('音效与战绩模块已装配', await page.evaluate(() =>
+    !!window.__stickWar.audio && !!window.__stickWar.progress));
+  const audioBefore = await page.locator('#audioBtn').getAttribute('aria-pressed');
+  await page.click('#audioBtn');
+  const audioAfter = await page.locator('#audioBtn').getAttribute('aria-pressed');
+  check('音效开关可切换', audioBefore !== audioAfter, `${audioBefore} → ${audioAfter}`);
+  await page.click('#audioBtn');   // 恢复
 
   // 暂停浮层：有 ×、× 恢复、Esc 恢复；暂停时面板必须被收起
   await page.click('#shopBtn');

@@ -1,4 +1,4 @@
-import { CONFIG, assetPath } from './config.js?v=2.10.0';
+import { CONFIG, assetPath } from './config.js?v=2.11.0';
 
 const P = CONFIG.presentation;
 

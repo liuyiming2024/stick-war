@@ -1,17 +1,23 @@
-import { CONFIG, ASSET_KEYS } from './config.js?v=2.10.0';
-import { createState, resetMatch } from './state.js?v=2.10.0';
-import { createRng } from './rng.js?v=2.10.0';
+import { CONFIG, ASSET_KEYS } from './config.js?v=2.11.0';
+import { createState, resetMatch } from './state.js?v=2.11.0';
+import { createRng } from './rng.js?v=2.11.0';
 import { step, minePositions, setDifficulty, aiGrowthInfo, grantGems,
-  selectChampion, releaseChampion, setControlAxis, championInfo } from './simulation.js?v=2.10.0';
-import { createAssets } from './assets.js?v=2.10.0';
-import { createRenderer } from './render.js?v=2.10.0';
-import { createUI } from './ui.js?v=2.10.0';
-import { createFixedStepDriver } from './timing.js?v=2.10.0';
+  selectChampion, releaseChampion, setControlAxis, championInfo,
+  setAmmo, effectsInfo } from './simulation.js?v=2.11.0';
+import { createAssets } from './assets.js?v=2.11.0';
+import { createRenderer } from './render.js?v=2.11.0';
+import { createUI } from './ui.js?v=2.11.0';
+import { createFixedStepDriver } from './timing.js?v=2.11.0';
+import { createAudio } from './audio.js?v=2.11.0';
+import { createProgress } from './progress.js?v=2.11.0';
 
 const canvas = document.getElementById('canvas');
 const state = createState();
 const rng = createRng(Date.now() >>> 0);
 const renderer = createRenderer(canvas);
+const progress = createProgress(CONFIG.progress.storageKey);
+let muted = progress.load().muted;
+const audio = createAudio(CONFIG.audio, { isMuted: () => muted });
 
 let last = performance.now();
 let started = false;
@@ -32,11 +38,18 @@ const assets = createAssets({
 const driver = createFixedStepDriver(CONFIG.match.fixedStep, CONFIG.match.maxFrameDelta, (dt) => {
   if (state.phase !== 'playing') return;
   const events = step(state, dt, rng);
-  for (const e of events) if (e.type === 'end') ui.showEnd(e.result);
+  audio.consume(events);
+  for (const e of events) {
+    if (e.type === 'end') {
+      progress.record(state, e.result);   // 先写，showEnd 才能读到刷新后的最佳
+      ui.showEnd(e.result);
+    }
+  }
 });
 
 const ui = createUI(state, {
   start(difficulty) {
+    audio.resume();                       // 必须在用户手势里，浏览器才允许出声
     setDifficulty(state, difficulty);
     resetMatch(state);
     state.phase = 'playing';
@@ -50,8 +63,28 @@ const ui = createUI(state, {
   toggleFollow() { renderer.setFollow(state, !state.view.follow); },
   grantGems() {
     const r = grantGems(state);
-    ui.toast(`+${r.amount} 宝石（当前 ${Math.round(r.total)}）· 免费无限领，可当金币花`);
+    if (!r.ok) { ui.toast(r.reason); ui.sync(); return; }
+    audio.gem();
+    ui.toast(`+${r.amount} 宝石（当前 ${Math.round(r.total)}）· 本局剩余 ${r.remaining} 次`);
     ui.sync();
+  },
+  getProgress: () => progress.load(),
+  clearProgress() { progress.reset(); ui.sync(); },
+  isMuted: () => muted,
+  toggleAudio() {
+    audio.resume();
+    muted = !muted;
+    progress.setMuted(muted);
+    ui.toast(muted ? '音效已关闭' : '程序合成音效已开启');
+    ui.sync();
+  },
+  setAmmo(kind) {
+    const r = setAmmo(state, kind);
+    if (!r.ok) { ui.toast(r.reason); return; }
+    audio.play('click');
+    ui.refreshAmmo();
+    ui.sync();
+    ui.toast(r.unchanged ? `当前已是${r.label}` : `已切换为${r.label}（全局生效）`);
   },
   goMenu() {
     setControlAxis(state, 0);
@@ -120,6 +153,7 @@ canvas.addEventListener('pointerup', (e) => {
   const wasActive = championInfo(state).active;
   const r = selectChampion(state, worldX);
   if (r.ok) {
+    audio.play('select');
     ui.toast(`已接管 ${CONFIG.units[r.unit].name} · ←/→ 或按住 ◀▶ 移动 · Esc / × 退出`);
   } else if (wasActive) {
     ui.toast('已退出指挥');
@@ -156,4 +190,8 @@ window.__stickWar = {
     axis: (a) => setControlAxis(state, a),
     info: () => championInfo(state),
   },
+  effects: () => effectsInfo(state),
+  setAmmo: (kind) => setAmmo(state, kind),
+  grantGems: () => grantGems(state),
+  audio, progress,
 };

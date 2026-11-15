@@ -1,4 +1,4 @@
-import raw from './config.generated.js?v=2.10.0';
+import raw from './config.generated.js?v=2.11.0';
 
 export const CONFIG = raw;
 export const UNIT_ORDER = Object.keys(raw.units);

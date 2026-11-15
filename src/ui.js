@@ -1,7 +1,8 @@
-import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.10.0';
-import { unitIconHTML, toolSVG, gemSVG } from './icons.js?v=2.10.0';
-import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.10.0';
-import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo, canAfford, championInfo } from './simulation.js?v=2.10.0';
+import { CONFIG, UNIT_ORDER, upgradeStats } from './config.js?v=2.11.0';
+import { unitIconHTML, toolSVG, gemSVG } from './icons.js?v=2.11.0';
+import { upgradeLevels, countTeam, pendingTeam, isTerminal } from './state.js?v=2.11.0';
+import { spawnPlayer, doUpgrade, setMode, cancelTraining, aiGrowthInfo, canAfford, championInfo, effectsInfo } from './simulation.js?v=2.11.0';
+import { formatClock } from './progress.js?v=2.11.0';
 
 const C = CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -10,7 +11,8 @@ export function createUI(state, actions) {
   const el = {
     mainMenu: $('mainMenu'), gameUI: $('gameUI'), loadTip: $('loadTip'),
     startBtn: $('startBtn'), helpBtn: $('helpBtn'), menuSub: $('menuSub'),
-    gold: $('gold'), gems: $('gems'), gemBadge: $('gemBadge'), gemBtn: $('gemBtn'),
+    gold: $('gold'), gems: $('gems'), gemBadge: $('gemBadge'),
+    gemBtn: $('gemBtn'), gemBtnLabel: $('gemBtnLabel'),
     pop: $('pop'), popMax: $('popMax'),
     homeHp: $('homeHp'), enemyHp: $('enemyHp'), clock: $('clock'), aiDev: $('aiDev'),
     unitBar: $('unitBar'), shopGrid: $('shopGrid'), upgradeGrid: $('upgradeGrid'),
@@ -20,7 +22,11 @@ export function createUI(state, actions) {
     attackBtn: $('attackBtn'), defendBtn: $('defendBtn'), garrisonBtn: $('garrisonBtn'),
     pauseBtn: $('pauseBtn'), difficulty: $('difficulty'), queueStrip: $('queueStrip'),
     camLeft: $('camLeft'), camRight: $('camRight'), camFollow: $('camFollow'),
-    assetBadge: $('assetBadge'),
+    assetBadge: $('assetBadge'), ammoBadge: $('ammoBadge'), audioBtn: $('audioBtn'),
+    ammoBtn: $('ammoBtn'), statsBtn: $('statsBtn'),
+    ammoPanel: $('ammoPanel'), ammoGrid: $('ammoGrid'),
+    statsPanel: $('statsPanel'), statsBody: $('statsBody'),
+    closeAmmoX: $('closeAmmoX'), closeStatsX: $('closeStatsX'),
     championBar: $('championBar'), championName: $('championName'),
     champExit: $('champExit'), champHoldLeft: $('champHoldLeft'), champHoldRight: $('champHoldRight'),
     overlay: $('pauseOverlay'), toastEl: $('toast'),
@@ -70,19 +76,77 @@ export function createUI(state, actions) {
     if (setMode(state, m)) sync();
   }
 
+  // v2.11：四个面板共用同一个互斥入口，Esc / 遮罩 / × 都收到这里。
+  const panelNodes = {
+    shop: () => el.shopPanel,
+    upgrade: () => el.upgradePanel,
+    ammo: () => el.ammoPanel,
+    stats: () => el.statsPanel,
+  };
+  const anyPanelOpen = () => Object.values(panelNodes).some((get) => !get().hidden);
+
   function closePanels() {
-    el.shopPanel.hidden = true;
-    el.upgradePanel.hidden = true;
+    for (const get of Object.values(panelNodes)) get().hidden = true;
     el.backdrop.hidden = true;
+    // 战绩面板打开时暂时收起主菜单（它 z-index 更高）、恢复 gameUI，关闭后还回去。
+    if (state.phase === 'menu') {
+      document.body.classList.remove('menu-stats');
+      el.gameUI.hidden = true;
+      el.mainMenu.hidden = false;
+    }
   }
 
-  // 所有面板共用的唯一入口：顺手收掉另一个，避免两层叠在一起出不来。
+  // 战绩面板在主菜单也要能看；其余三个只对局中打开。
   function openPanel(which) {
-    if (state.phase !== 'playing') { toast('先回到对局再打开面板'); return; }
-    el.shopPanel.hidden = which !== 'shop';
-    el.upgradePanel.hidden = which !== 'upgrade';
+    if (which !== 'stats' && state.phase !== 'playing') {
+      toast('先回到对局再打开面板');
+      return;
+    }
+    for (const [key, get] of Object.entries(panelNodes)) get().hidden = key !== which;
     el.backdrop.hidden = false;
+    if (which === 'stats' && state.phase === 'menu') {
+      // 面板挂在 gameUI 内，主菜单阶段 gameUI 是 hidden 的；临时放行，
+      // 并用 menu-stats class 把顶栏/底栏/画布藏掉，只留面板与遮罩。
+      el.gameUI.hidden = false;
+      document.body.classList.add('menu-stats');
+      el.mainMenu.hidden = true;
+    }
     if (which === 'upgrade') refreshUpgrade();
+    if (which === 'ammo') refreshAmmo();
+    if (which === 'stats') refreshStats();
+  }
+
+  function refreshAmmo() {
+    const info = effectsInfo(state);
+    el.ammoGrid.innerHTML = '';
+    for (const [key, cfg] of Object.entries(C.ammo.kinds)) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'shopItem ammoItem';
+      card.setAttribute('aria-pressed', String(info.ammo === key));
+      const eff = cfg.effect
+        ? { burn: '灼烧持续伤害', poison: '持续伤害 + 减速', bleed: '持续流血' }[cfg.effect]
+        : '无附加效果';
+      card.innerHTML = `<div class="name">${cfg.label}</div>` +
+        `<div class="price">${C.ammo.cost} 金币 / 宝石</div>` +
+        `<span class="effect">${eff} · 伤害 ×${cfg.dmgMul}</span>`;
+      card.addEventListener('click', () => actions.setAmmo(key));
+      el.ammoGrid.appendChild(card);
+    }
+  }
+
+  function refreshStats() {
+    const p = actions.getProgress();
+    const cells = [
+      ['对局数', p.matches],
+      ['胜 / 负', `${p.wins} / ${p.losses}`],
+      ['最快胜利', formatClock(p.bestWinSec)],
+      ['累计消耗宝石', p.totalGems],
+      ['上次难度', C.match.difficulties[p.lastDifficulty]?.label ?? p.lastDifficulty],
+      ['音效', p.muted ? '关' : '开'],
+    ];
+    el.statsBody.innerHTML = cells.map(([k, v]) =>
+      `<div class="statCell">${k}<b>${v}</b></div>`).join('');
   }
 
   let queueSignature = '';
@@ -195,6 +259,19 @@ export function createUI(state, actions) {
     el.pauseBtn.setAttribute('aria-pressed', String(state.phase === 'paused'));
     el.pauseBtn.textContent = state.phase === 'paused' ? '继续' : '暂停';
     el.camFollow.setAttribute('aria-pressed', String(!!state.view.follow));
+    const fx = effectsInfo(state);
+    setText(el.ammoBadge, 'ammoBadge', fx.ammoLabel);
+    // v2.11：每局领取上限。真 .disabled（不只是置灰），并显式显示剩余次数。
+    const used = state.stats.gemsGranted;
+    const limit = C.gems.grantLimit;
+    const exhausted = used >= limit;
+    const gemBtnDisabled = !playable || exhausted;
+    if (el.gemBtn.disabled !== gemBtnDisabled) el.gemBtn.disabled = gemBtnDisabled;
+    setText(el.gemBtnLabel, 'gemBtnLabel',
+      exhausted ? '已领完 2/2' : `领宝石 ${used}/${limit}`);
+    const muted = actions.isMuted();
+    el.audioBtn.setAttribute('aria-pressed', String(!muted));
+    setText(el.audioBtn, 'audioBtn', muted ? '音效 关' : '音效 开');
     const champ = championInfo(state);
     const showChamp = champ.active && state.phase === 'playing';
     if (el.championBar.hidden === showChamp) el.championBar.hidden = !showChamp;
@@ -270,6 +347,8 @@ export function createUI(state, actions) {
     const won = result === 'won';
     toast(won ? '敌方雕像被摧毁，胜利！' : '我方雕像被摧毁，失败');
     const dev = aiGrowthInfo(state);
+    const fx = effectsInfo(state);
+    const p = actions.getProgress();
     const total = Math.floor(state.elapsed);
     const clock = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
     showOverlay(
@@ -282,8 +361,11 @@ export function createUI(state, actions) {
         `敌方出兵 ${state.stats.aiSpawned} · 矿工 ${dev.minersTrained} 名 / ${dev.trips} 趟 · 科技 ${dev.upgrades} 级`,
         `敌方累计采矿 ${Math.round(dev.earned)} 金 · 取消训练 ${state.stats.cancelled}`,
         `城堡弓箭 ${state.stats.fortArrows} 发`,
-        `领取宝石 ${state.stats.gemsGranted} 次 · 抵扣 ${state.stats.gemsSpent} 颗`,
+        `领取宝石 ${state.stats.gemsGranted}/${C.gems.grantLimit} 次 · 抵扣 ${state.stats.gemsSpent} 颗`,
         `单兵指挥 ${Math.floor(state.control.seconds)} 秒 · 手动移动 ${Math.round(state.control.distance)} px`,
+        `箭矢 ${fx.ammoLabel} · 投矛 ${fx.stats.spearThrows} 次 · 召唤 ${fx.stats.summons} 个`,
+        `状态效果 眩晕 ${fx.stats.stuns} 次 · 持续伤害 ${Math.round(fx.stats.dotDamage)}`,
+        `历史最佳 ${formatClock(p.bestWinSec)} · 总战绩 ${p.wins} 胜 ${p.losses} 负`,
       ],
     );
   }
@@ -306,12 +388,16 @@ export function createUI(state, actions) {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const k = e.key;
     if (state.phase === 'menu') {
+      // 主菜单里也能用 Esc 关掉战绩面板，否则「进得去出不来」。
+      if (k === 'Escape' && anyPanelOpen()) {
+        e.preventDefault(); closePanels(); return;
+      }
       if (k === 'Enter') { actions.start(el.difficulty.value); e.preventDefault(); }
       return;
     }
     if (k === 'Escape') {
       e.preventDefault();
-      if (!el.shopPanel.hidden || !el.upgradePanel.hidden) { closePanels(); return; }
+      if (anyPanelOpen()) { closePanels(); return; }
       if (championInfo(state).active) {
         axisKeys.clear();
         actions.releaseChampion();
@@ -345,7 +431,8 @@ export function createUI(state, actions) {
   function bind() {
     $('shopBtn').innerHTML = `${toolSVG('shop')}<span>商店</span>`;
     $('upgradeBtn').innerHTML = `${toolSVG('upgrade')}<span>升级</span>`;
-    el.gemBtn.innerHTML = `${gemSVG()}<span>领宝石</span>`;
+    // 只前插 SVG，不重建 span：否则 el.gemBtnLabel 会指向被替换掉的旧节点。
+    el.gemBtn.insertAdjacentHTML('afterbegin', gemSVG());
     el.gemBtn.addEventListener('click', () => actions.grantGems());
     for (const [key, d] of Object.entries(C.match.difficulties)) {
       const opt = document.createElement('option');
@@ -355,7 +442,7 @@ export function createUI(state, actions) {
     }
     el.difficulty.value = state.difficulty;
     el.startBtn.addEventListener('click', () => actions.start(el.difficulty.value));
-    el.helpBtn.addEventListener('click', () => toast('底栏「领宝石」免费无限领，金币不足自动 1:1 抵扣；矿工就近挖自家矿；A/D/G 攻守驻；点队列可取消退款'));
+    el.helpBtn.addEventListener('click', () => toast('底栏「领宝石」每局 2 次，金币不足自动 1:1 抵扣；矿工就近挖自家矿；A/D/G 攻守驻；点队列可取消退款'));
     $('menuBtn').addEventListener('click', () => actions.goMenu());
     el.pauseBtn.addEventListener('click', () => actions.togglePause());
     el.attackBtn.addEventListener('click', () => mode('attack'));
@@ -383,8 +470,17 @@ export function createUI(state, actions) {
     hold(el.champHoldRight, 1);
     $('shopBtn').addEventListener('click', () => openPanel('shop'));
     $('upgradeBtn').addEventListener('click', () => openPanel('upgrade'));
+    el.ammoBtn.addEventListener('click', () => openPanel('ammo'));
+    el.statsBtn.addEventListener('click', () => openPanel('stats'));
+    el.audioBtn.addEventListener('click', () => actions.toggleAudio());
+    $('clearStats').addEventListener('click', () => {
+      actions.clearProgress();
+      refreshStats();
+      toast('本机战绩已清空');
+    });
     // 每个面板都有两条退路：底部文字按钮 + 右上角 ×
-    for (const id of ['closeShop', 'closeShopX', 'closeUpgrade', 'closeUpgradeX']) {
+    for (const id of ['closeShop', 'closeShopX', 'closeUpgrade', 'closeUpgradeX',
+      'closeAmmo', 'closeAmmoX', 'closeStats', 'closeStatsX']) {
       $(id).addEventListener('click', closePanels);
     }
     el.backdrop.addEventListener('click', closePanels);
@@ -402,7 +498,7 @@ export function createUI(state, actions) {
   bind();
 
   return {
-    sync, toast, showMenu, showGame, showPause, showEnd, refreshUpgrade,
+    sync, toast, showMenu, showGame, showPause, showEnd, refreshUpgrade, refreshAmmo, refreshStats,
     setLoadTip: (text) => { el.loadTip.textContent = text; },
     setAssetBadge: (loaded, total, missing) => {
       const node = el.assetBadge;

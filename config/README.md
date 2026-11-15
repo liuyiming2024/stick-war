@@ -4,15 +4,15 @@
 
 ```bash
 npm run build     # 重新生成 src/config.generated.js + 结构校验
-npm run check     # 生成 + 96 个单测 + 素材/渲染确定性静态自检
-npm run smoke     # 可选：85 项页面可达性断言
+npm run check     # 生成 + 113 个单测 + 素材/渲染确定性静态自检
+npm run smoke     # 可选：107 项页面可达性断言
 ```
 
 `src/config.generated.js` 必须一起提交（Pages 从 `main` 直出，运行时不跑构建）。CI 用 `git diff --exit-code -- src/config.generated.js index.html src/` 校验漂移。
 
 **`meta.version` 同时是 ESM 缓存指纹**：`scripts/stamp-cache.mjs` 会给 `index.html` 的 module script / stylesheet 与 `src/*.js` 的所有相对 import 追加 `?v=<version>`。改版本号后**必须** `npm run build`，否则浏览器会继续用旧 URL 的缓存模块（现象是线上停在旧版本，甚至因导出不匹配白屏）。`check-assets.mjs` 会静态校验 19 条 import 的指纹全等于当前版本。
 
-`scripts/build-config.mjs` 同时承担结构校验：必填段、单位字段、`trainSec > 0`、难度三档、`damageMatrix` 四个倍率、**世界尺寸与缩放上下限**、**每个矿点距回营点的距离不得小于 `minMineHomeDistanceRatio × world.width` 且不得越过中线**、`counterMatrix` 三元组合法、波次参数比例关系、`assets` 软/硬超时与重试、**`gems` 免费无限（拒绝冷却/总量/价格）、`control` 点击阈值不得 >24 且移速倍率 ≤3**、`animation` 全部参数为正、`presentation` 调色板齐全。
+`scripts/build-config.mjs` 同时承担结构校验：必填段、单位字段、`trainSec > 0`、难度三档、`damageMatrix` 四个倍率、**世界尺寸与缩放上下限**、**每个矿点距回营点的距离不得小于 `minMineHomeDistanceRatio × world.width` 且不得越过中线**、`counterMatrix` 三元组合法、波次参数比例关系、`assets` 软/硬超时与重试、**`effects` DoT 参数为正 / `ammo.kinds` 效果名合法 / `skills` 溅射与召唤倍率 ≤1 / `audio` 增益与并发 / `progress` 键 / `gems.grantLimit` 为 1..20 整数（拒绝冷却与价格）、`control` 点击阈值不得 >24 且移速倍率 ≤3**、`animation` 全部参数为正、`presentation` 调色板齐全。
 
 ## 各段含义
 
@@ -20,8 +20,13 @@ npm run smoke     # 可选：85 项页面可达性断言
 | --- | --- |
 | `meta` | 标题与版本号（菜单展示，格式 `x.y.z`；同时是 ESM 与素材 URL 的缓存指纹） |
 | `world` | **v2.8**：固定逻辑世界 `width/height`、镜头缩放 `minScale/maxScale`、跟随锚点 `followAnchorRatio`、插值速度 `followLerpPerSec`、按钮步进 `panStepRatio`、窄屏默认跟随阈值 `mobileFollowWidth` |
+| `effects` | **v2.11** 状态效果：`stunSec` / `burnSec` / `burnDps` / `poisonSec` / `poisonDps` / `poisonSlowMul` / `bleedSec` / `bleedDps` / `dotTickSec` |
+| `ammo` | **v2.11** 箭矢：`cost` / `default` / `kinds`（4 种，各带 `effect`、`dmgMul`）；全局切换我方弓箭手与城堡射手 |
+| `skills` | **v2.11** 原版兵种技能：巫师眩晕/溅射、召唤（`summonPlayerOnly`/上限/ttl/弱化倍率）、矛士投矛周期与射程 |
+| `audio` | **v2.11** 程序音效：`masterGain` / `cooldownMs` / `maxVoices` / `enabled` |
+| `progress` | **v2.11** 本机战绩 `storageKey` |
 | `control` | **v2.10** 单兵指挥：`enabled`、`selectRadiusPx`（世界像素）、`moveSpeedMul` 手动移速倍率、`clickMaxSlopPx` / `clickMaxMs` 点击与拖动双阈值 |
-| `gems` | **v2.9** 免费无限货币：`starting` / `grantAmount` / `goldPerGem` / `autoSpend`；`build-config.mjs` 拒绝 `cooldownSec` / `maxTotal` / `cost` |
+| `gems` | **v2.9** 每局限领 2 次货币：`starting` / `grantAmount` / `goldPerGem` / `autoSpend`；`build-config.mjs` 拒绝 `cooldownSec` / `maxTotal` / `cost` |
 | `layout` | 雕像位置与判定半径、地面线、驻守线、`fortInsetRatio`、`goldMines` 矿点数组、矿堆绘制比例、单位尺寸比例 |
 | `match` | 初始金币、雕像血量、人口上限、固定步长、雕像伤害倍率、`fortArcher*` 城堡射手、`difficulties` 三档难度 |
 | `economy` | 矿工每趟收益、挖掘耗时、AI 收入、`castleGoldPerSec` 被动收入、`bagPerLevel` / `pickaxePerLevel`；**v2.8** `carrySpeedMul` 背矿减速、`minMineHomeDistanceRatio` 矿点距回营点最短比例 |

@@ -10,7 +10,7 @@ const html = await readFile(path.join(root, 'index.html'), 'utf8');
 const ui = await readFile(path.join(root, 'src', 'ui.js'), 'utf8');
 const problems = [];
 
-const panels = ['shopPanel', 'upgradePanel'];
+const panels = ['shopPanel', 'upgradePanel', 'ammoPanel', 'statsPanel'];
 for (const id of panels) {
   const start = html.indexOf(`id="${id}"`);
   const end = html.indexOf('</section>', start);
@@ -47,8 +47,16 @@ if (!css.includes('#panelBackdrop')) problems.push('样式缺少遮罩');
 for (const needle of ['overlayClose', "k === 'Escape'", 'closePanels()', 'openPanel(', 'backdrop.addEventListener']) {
   if (!ui.includes(needle)) problems.push(`ui.js 缺少导航逻辑: ${needle}`);
 }
-for (const id of ['closeShopX', 'closeUpgradeX', 'closeShop', 'closeUpgrade']) {
+for (const id of ['closeShopX', 'closeUpgradeX', 'closeShop', 'closeUpgrade',
+  'closeAmmoX', 'closeStatsX', 'closeAmmo', 'closeStats']) {
   if (!html.includes(`id="${id}"`) || !ui.includes(id)) problems.push(`关闭控件 ${id} 未同时存在于 HTML 与事件绑定`);
+}
+for (const id of ['ammoBtn', 'statsBtn', 'audioBtn', 'ammoBadge', 'clearStats']) {
+  if (!html.includes(`id="${id}"`)) problems.push(`缺少 v2.11 控件 ${id}`);
+}
+const main = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
+for (const needle of ['createAudio', 'createProgress', 'audio.consume(', 'progress.record(']) {
+  if (!main.includes(needle)) problems.push(`main.js 缺少 v2.11 装配: ${needle}`);
 }
 
 if (problems.length) {

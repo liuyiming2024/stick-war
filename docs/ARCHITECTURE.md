@@ -29,7 +29,7 @@ src/assets.js    10 张 WebP 加载 / 两段式超时 + 单次重试 / 染色与
 
 `src/main.js` 只做装配与输入：创建 state / rng / assets / renderer / ui，用 `src/timing.js` 的固定步长累加器驱动 `step`，每帧调一次 `renderer.draw(state, assets)` 和 `ui.sync()`；canvas 上用双阈值区分点选与拖动平移。素材加载完成后才 `enableStart()`；软超时（9s）先放行开战，硬超时（26s）才把没到的图记入缺失。
 
-**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 96 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
+**硬性边界**：`state.js` 与 `simulation.js` 不得 import 任何浏览器全局。这是 113 个单元测试能在 `node --test` 里跑起来的前提，也是后续换渲染层时逻辑不用重写的前提。
 
 ## 渲染：位图立绘 + 矢量特效（v2.5）
 
@@ -102,7 +102,7 @@ v2.6 把矢量从「美术」降级为「信息」：删掉岩块晶簇矿堆、
 
 层级（低 → 高）：`canvas/背景 0` → `panelBackdrop 140` → `面板 150` → `controlBtns 160` → `queueStrip 165` → `topBar / bottomBar 170` → **`championBar 175`** → `pauseOverlay 180` → `mainMenu 200` → `toast 300`。控制条放在战场右上角（`top:52px`）；指挥条窄屏移到底栏上方且高于面板，保证它的 `×` 永远可点。
 
-每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 指挥 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处、**战场空白处**同样能退。`check-navigation.mjs` 静态守结构（含指挥条控件与方向键处理），`smoke-pages.mjs` 跑 85 项交互断言。
+每个能打开的层都有 `×`；`Esc` 分级后退 `面板 → 指挥 → 暂停 → 结算 → 主菜单`；点遮罩、底部关闭按钮、浮层空白处、**战场空白处**同样能退。`check-navigation.mjs` 静态守结构（含指挥条控件与方向键处理），`smoke-pages.mjs` 跑 107 项交互断言。
 
 ## 配置怎么做到的
 
@@ -135,13 +135,28 @@ config/game.json  ──scripts/build-config.mjs──▶  src/config.generated.
 | `tests/mechanics.test.mjs` | 训练队列/退款/升级快照/人口、三指令与驻堡、城堡射手、克制倍率、被动收入、矿工 Armory、难度 |
 | `tests/vector.test.mjs` | 位图图标引用、工具 SVG 自包含、无墙钟相位、步态只在移动时累加、fx 递减与暂停冻结、驻堡免疫 |
 | `tests/ai-growth.test.mjs` | 开局先补矿工、矿工目标与人口上限、真实运矿交付与自家半场、难度收益倍率、独立 Armory 与升级快照生效、60/120Hz 一致、重开清空 |
+| `scripts/check-navigation.mjs` | 4 个面板 + 指挥条的 × / Esc 静态自检（v2.11） |
 | `scripts/check-assets.mjs` | 10 张 WebP 存在 / 字节数 / WebP 头尺寸、素材键与配置一致、零墙钟/随机/filter、animation 被真实消费、Pages 入口 |
 | `tests/world-waves.test.mjs` | 固定世界与窄屏视口、矿距/中线、负重减速、克制权重与饱和、波次阶段流转/波容/帧率一致/重开 |
-| `tests/gems.test.mjs` | 免费无限领取、1:1 购买力、实扣构成与整颗取整、取消原路退款、升级支付、难度下调与兜底 |
+| `tests/gems.test.mjs` | 每局免费领 2 次取、1:1 购买力、实扣构成与整颗取整、取消原路退款、升级支付、难度下调与兜底 |
+| `tests/effects.test.mjs` | 四种弹药与状态挂/衰减/DoT、中毒减速、眩晕、巫师溅射与召唤、矛士投矛、AI 不召唤、暂停冻结、60/120Hz 一致、重开清空 |
+| `tests/gems.test.mjs` | 每局 2 次上限与重开恢复（v2.11 修订） |
 | `tests/control.test.mjs` | 选中/点空处释放、手动覆盖自动推进与驻堡、攻击与拆雕像同源、矿工接管、死亡自动释放、暂停清输入、60/120Hz 一致、重开清空 |
-| `scripts/smoke-pages.mjs` | 85 项可达性（含 10 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头按钮/宽屏 resize**、暂停画面静止 / 恢复后继续动画） |
+| `scripts/smoke-pages.mjs` | 107 项可达性（含 10 张 WebP 全 200、素材缺失数 0、7+7+7 位图解码、Canvas 非空、**窄屏视口/DPR/矿距/金矿位图/`位图 10/10`/镜头按钮/宽屏 resize**、暂停画面静止 / 恢复后继续动画） |
 
 CI 另做全模块语法检查、配置漂移、导航静态自检、Pages 入口（含 `test -f assets/manifest.json` 与 `assets/*.webp` 数量 = 10）。Playwright 烟测需要本机 Chrome，CI 不跑（用静态自检兜底）。
+
+## v2.11：状态效果、音效与战绩的接线
+
+`state` 新增 `ammo`、`skillTimers`、单位上的 `fx{stun,burn,poison,bleed}` / `dotAcc` / `throwCd` / `summonCd` / `summoned` / `ttl`。所有状态按秒递减，DoT 每 `dotTickSec` 结算一次（避免 60/120Hz 分叉），`effSpeed(u)` 是移速唯一口径。`step()` 在单位循环里对 `fx.stun>0` 短路，末尾依次跑 `tickEffects` / `tickSummons`。
+
+投射物携带 `ammoEffect` / `ammoDmgMul` / `splash` / `stun` 元数据，命中时统一在 `tickProjectiles` 施加；`applyDot` 刻意不复用 `applyDamage`，避免克制矩阵与防御倍率被二次计算。兵种技能挂在 `tickFighter` 开头，因此单兵接管的单位同样保留技能。
+
+**分层边界**：`audio.js` 与 `progress.js` 只在 `main.js` 装配。逻辑层不 `import` 它们，也不引用 `window` / `localStorage`；音效只消费 `step()` 返回的 `events`，战绩只在 `type:'end'` 时写一次。这是 113 个单测仍能在 `node --test` 里整局推演的前提。
+
+**宝石口径变更**（v2.11）：`grantGems()` 受 `gems.grantLimit=2` 约束，`stats.gemsGranted` 随 `resetMatch()` 归零，不跨局、不入存档；UI 按钮真 `.disabled`，文案显示 `n/2`。
+
+**面板层级**：四个面板互斥，`openPanel('stats')` 在主菜单阶段临时解除 `#gameUI` 隐藏并加 `body.menu-stats`，只放行 `#statsPanel` 与 `#panelBackdrop`；`closePanels()` 还原。Esc 在 `phase==='menu'` 也先检查 `anyPanelOpen()`，避免进得去出不来。
 
 ## 单兵指挥（v2.10）
 

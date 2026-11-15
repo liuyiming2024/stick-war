@@ -1,4 +1,4 @@
-import { CONFIG, UNIT_ORDER, bonusFor, freshUpgrades } from './config.js?v=2.10.0';
+import { CONFIG, UNIT_ORDER, bonusFor, freshUpgrades } from './config.js?v=2.11.0';
 
 // 纯状态：不引用 DOM / canvas，可在 Node 下直接构造与推演。
 export function createState(w = CONFIG.world.width, h = CONFIG.world.height, difficulty = 'normal') {
@@ -15,13 +15,16 @@ export function createState(w = CONFIG.world.width, h = CONFIG.world.height, dif
     phase: 'menu',              // menu | playing | paused | won | lost
     difficulty: CONFIG.match.difficulties[difficulty] ? difficulty : 'normal',
     gold: CONFIG.match.startingGold,
+    // v2.11：弹药全局切换（我方弓箭手 + 城堡射手）；技能计时器按队分开。
+    ammo: CONFIG.ammo.default,
+    skillTimers: { spear: [0, 0], summon: [0, 0] },
     // v2.10：单兵指挥。championId 指向被玩家接管的一个我方单位；
     // axis 只取 -1/0/1，由键盘或按住按钮写入，step() 里覆盖该单位的自动行为。
     control: {
       championId: null, axis: 0, selectedAt: 0,
       seconds: 0, distance: 0,
     },
-    // v2.9：宝石是免费且可无限领取的第二货币，金币不足时自动 1:1 抵扣。
+    // 宝石：每局免费领 grantLimit 次的第二货币，金币不足时自动 1:1 抵扣。
     gems: CONFIG.gems.starting,
     aiGold: CONFIG.economy.aiStartGold,
     homeHp: CONFIG.match.statueHp,
@@ -57,6 +60,8 @@ export function createState(w = CONFIG.world.width, h = CONFIG.world.height, dif
       aiWaves: 0, aiMaxWaveSize: 0, aiPhaseChanges: 0,
       gemsGranted: 0, gemPayments: 0, gemsSpent: 0,
       championSwitches: 0,
+      ammoSwitches: 0, spearThrows: 0, summons: 0,
+      stuns: 0, dotTicks: 0, dotDamage: 0,
     },
   };
 }
@@ -106,6 +111,14 @@ export function spawnUnit(state, type, team, upgrades = null) {
     walkPhase: 0,
     moving: false,
     inFort: false,
+    // v2.11：状态效果全部按秒递减，渲染层只读；dotAcc 是 DoT 结算累加器。
+    fx: { stun: 0, burn: 0, poison: 0, bleed: 0 },
+    dotAcc: 0,
+    // 原版 Spearton 投矛 / Magikill 召唤
+    throwCd: CONFIG.skills.spearThrowIntervalSec,
+    summonCd: CONFIG.skills.summonIntervalSec,
+    summoned: false,
+    ttl: Infinity,
     // 矿工状态机
     job: 'toMine',
     carry: 0,

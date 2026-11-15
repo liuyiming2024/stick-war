@@ -3,8 +3,8 @@
 export default Object.freeze({
   "meta": {
     "title": "火柴人战争",
-    "version": "2.10.0",
-    "subtitle": "位图立绘 · 宝石无限 · 单兵指挥"
+    "version": "2.11.0",
+    "subtitle": "状态效果 · 程序音效 · 战绩存档"
   },
   "world": {
     "width": 1600,
@@ -59,6 +59,71 @@ export default Object.freeze({
     "minerHeightMul": 0.95,
     "canvasBottomReserve": 120
   },
+  "effects": {
+    "stunSec": 1.1,
+    "burnSec": 3,
+    "burnDps": 6,
+    "poisonSec": 5,
+    "poisonDps": 3,
+    "poisonSlowMul": 0.62,
+    "bleedSec": 4,
+    "bleedDps": 4,
+    "dotTickSec": 0.25,
+    "_note": "状态效果按秒递减，DoT 每 dotTickSec 结算一次；暂停时 step 不跑，全部冻结。"
+  },
+  "ammo": {
+    "cost": 60,
+    "default": "plain",
+    "kinds": {
+      "plain": {
+        "label": "普通箭",
+        "effect": null,
+        "dmgMul": 1
+      },
+      "fire": {
+        "label": "火箭",
+        "effect": "burn",
+        "dmgMul": 1.05
+      },
+      "poison": {
+        "label": "毒箭",
+        "effect": "poison",
+        "dmgMul": 0.95
+      },
+      "barbed": {
+        "label": "倒刺箭",
+        "effect": "bleed",
+        "dmgMul": 1
+      }
+    },
+    "_note": "全局切换我方弓箭手 + 城堡射手弹药；花金币/宝石，可用无限宝石兜底。AI 弓箭手始终用普通箭。"
+  },
+  "skills": {
+    "wizardStun": true,
+    "wizardSplashRadiusPx": 58,
+    "wizardSplashMul": 0.45,
+    "spearThrowIntervalSec": 6,
+    "spearThrowDmgMul": 1.2,
+    "spearThrowRangePx": 210,
+    "summonIntervalSec": 14,
+    "summonPlayerOnly": true,
+    "summonMax": 2,
+    "summonTtlSec": 12,
+    "summonHpMul": 0.55,
+    "summonDmgMul": 0.7,
+    "_note": "原版细节：Magikill 眩晕+溅射+召唤、Spearton 投矛。召唤物占人口但不计入出兵统计，ttl 到点消失。"
+  },
+  "audio": {
+    "enabled": true,
+    "masterGain": 0.16,
+    "cooldownMs": 45,
+    "maxVoices": 6,
+    "_note": "Web Audio 程序合成，零外部文件零网络请求；首次用户手势后 resume。只消费 step() 的 events，不进逻辑层。"
+  },
+  "progress": {
+    "storageKey": "stickWar.progress.v1",
+    "_note": "localStorage 战绩：胜/负/最佳用时/累计宝石/对局数/上次难度/静音。"
+  },
   "control": {
     "enabled": true,
     "selectRadiusPx": 90,
@@ -71,9 +136,10 @@ export default Object.freeze({
     "label": "宝石",
     "starting": 999,
     "grantAmount": 500,
+    "grantLimit": 2,
     "goldPerGem": 1,
     "autoSpend": true,
-    "_note": "免费且可无限次领取；金币不足时自动按 goldPerGem 抵扣，直接当金币花。领取无冷却、无上限。"
+    "_note": "每局最多免费领 grantLimit 次，仍无冷却、不花钱；金币不足时按 goldPerGem 抵扣。次数随重开恢复，不写进存档。"
   },
   "match": {
     "startingGold": 200,
@@ -444,6 +510,12 @@ export default Object.freeze({
     "gemDark": "#397d96",
     "champion": "#ffe0a0",
     "championGlow": "rgba(255,224,160,.28)",
+    "burn": "#ff8a4c",
+    "poison": "#9ed36a",
+    "bleed": "#e2796b",
+    "stun": "#ffe0a0",
+    "summon": "rgba(143,216,234,.45)",
+    "javelin": "#c9d6d8",
     "rockDark": "#394039",
     "rockLight": "#5d6659",
     "crack": "rgba(12,18,20,.72)",

@@ -1,6 +1,8 @@
 *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif}
 html,body{height:100%;overflow:hidden;background:#0c1114;touch-action:none;user-select:none;-webkit-user-select:none}
 [hidden]{display:none!important}
+/* 主菜单里看战绩：临时解除 gameUI 隐藏，但只放行面板与遮罩，不露出战场 HUD */
+body.menu-stats #gameUI> :not(#statsPanel):not(#panelBackdrop){display:none!important}
 button{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 
@@ -31,6 +33,17 @@ button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 .gemBtn:hover{border-color:#8fd8ea;box-shadow:0 0 0 1px rgba(143,216,234,.3) inset}
 .gemBtn .gemIcon{width:26px;height:26px;filter:drop-shadow(0 0 4px rgba(143,216,234,.35))}
 .gemBtn:active{transform:scale(.94)}
+#topBar .ammoBadge{color:#e8c98a;font-size:11px;white-space:nowrap}
+.ammoBtn{background:linear-gradient(180deg,#30291c,#201b13);border-color:#7a6438;color:#e8c98a}
+.ammoBtn:hover{border-color:#e8c98a}
+#audioBtn[aria-pressed="false"]{opacity:.55}
+.ammoItem[aria-pressed="true"]{border-color:#ffe0a0;box-shadow:0 0 0 1px rgba(255,224,160,.3) inset}
+.ammoItem .effect{display:block;font-size:10px;color:#9fb0b2;margin-top:2px;line-height:1.35}
+.statsBody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:4px 2px 10px}
+.statCell{background:linear-gradient(180deg,#202a2d,#171f22);border:1px solid #36454a;border-radius:8px;padding:9px;color:#c6d2d4;text-align:center}
+.statCell b{display:block;color:#e8c98a;font-size:18px;font-variant-numeric:tabular-nums;margin-top:3px}
+.ghostBtn{background:transparent;border-color:#5a4646;color:#e2a49c;margin-right:8px}
+@media (max-width:420px){.statsBody{grid-template-columns:1fr 1fr}}
 .camBtn{padding:7px 8px;letter-spacing:0}
 .camBtn[aria-pressed="true"]{opacity:1}
 #championBar{position:absolute;top:52px;left:8px;z-index:175;display:flex;align-items:center;gap:5px;
@@ -79,7 +92,7 @@ button:focus-visible{outline:2px solid #e8c98a;outline-offset:2px}
 #topBar{position:relative;z-index:170}
 #bottomBar{position:relative;z-index:170}
 #controlBtns{z-index:160}
-#shopPanel,#upgradePanel{position:absolute;left:0;right:0;bottom:80px;background:rgba(17,24,27,.97);border-top:1px solid #3a484c;padding:10px;padding-top:14px;z-index:150;max-height:62vh;overflow-y:auto;backdrop-filter:blur(6px)}
+#shopPanel,#upgradePanel,#ammoPanel,#statsPanel{position:absolute;left:0;right:0;bottom:80px;background:rgba(17,24,27,.97);border-top:1px solid #3a484c;padding:10px;padding-top:14px;z-index:150;max-height:62vh;overflow-y:auto;backdrop-filter:blur(6px)}
 #shopPanel:not([hidden]),#upgradePanel:not([hidden]){animation:panelIn .2s ease-out}
 /* 每个能打开的层，右上角都必须有一个看得见、点得到的 × */
 .panelClose{position:absolute;top:8px;right:10px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(232,201,138,.5);background:#25231c;color:#e8c98a;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;z-index:2;transition:transform .18s,background .12s}
@@ -153,6 +166,7 @@ body:not([data-phase="playing"]) .smallBtn[aria-pressed="true"]{animation-play-s
   #topBar{font-size:11px;padding:0 6px;gap:4px}
   #topBar .clock,#topBar .enemyDev,#topBar .assetBadge{display:none}
   #topBar .gemBadge .gemLabel{display:none}
+  #topBar .ammoBadge{font-size:10px}
   .unitIcon,.toolBtn{width:58px;height:60px}
   .panelClose{width:34px;height:34px;top:6px;right:6px}
   #controlBtns{gap:3px;flex-wrap:wrap}

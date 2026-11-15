@@ -23,21 +23,47 @@ test('开局自带宝石，金币起步也更宽裕', () => {
   assert.ok(s.gems > 0 && Number.isFinite(s.gems));
 });
 
-test('领取宝石免费、无冷却、无上限，可无限次调用', () => {
+test('领取宝石每局最多 2 次：前两次免费生效，第三次被拒且不改余额', () => {
   const s = playing();
   const g0 = s.gems, gold0 = s.gold;
-  for (let i = 0; i < 200; i++) {
-    const r = grantGems(s);
-    assert.equal(r.ok, true);
-    assert.equal(r.amount, C.gems.grantAmount);
-    assert.equal(r.total, g0 + (i + 1) * C.gems.grantAmount);
-  }
-  assert.equal(s.gems, g0 + 200 * C.gems.grantAmount);
+  assert.equal(C.gems.grantLimit, 2);
+  const r1 = grantGems(s);
+  assert.equal(r1.ok, true);
+  assert.equal(r1.amount, C.gems.grantAmount);
+  assert.equal(r1.remaining, 1);
+  const r2 = grantGems(s);
+  assert.equal(r2.ok, true);
+  assert.equal(r2.remaining, 0);
+  assert.equal(s.gems, g0 + 2 * C.gems.grantAmount);
   assert.equal(s.gold, gold0, '领取宝石不花金币');
-  assert.equal(s.stats.gemsGranted, 200, '200 次领取全部生效，没有被冷却拦下');
-  // 配置层也禁止任何形式的限制
-  assert.ok(!('cooldownSec' in C.gems) && !('maxTotal' in C.gems) && !('cost' in C.gems));
+  assert.equal(s.stats.gemsGranted, 2);
+
+  const before = { gems: s.gems, gold: s.gold };
+  const r3 = grantGems(s);
+  assert.equal(r3.ok, false);
+  assert.match(r3.reason, /已领完|2\/2/);
+  assert.equal(r3.remaining, 0);
+  assert.equal(s.gems, before.gems, '失败时不该加宝石');
+  assert.equal(s.gold, before.gold, '失败时不该动金币');
+  assert.equal(s.stats.gemsGranted, 2, '失败不该计数');
+  for (let i = 0; i < 50; i++) assert.equal(grantGems(s).ok, false);
+  assert.equal(s.gems, before.gems, '反复点击也不能绕过上限');
+
+  // 仍然免费、无冷却；上限只对局内次数生效，不写进存档。
+  assert.ok(!('cooldownSec' in C.gems) && !('cost' in C.gems));
   assert.equal(C.gems.autoSpend, true);
+  assert.ok(Number.isInteger(C.gems.grantLimit) && C.gems.grantLimit >= 1);
+});
+
+test('重开恢复领取次数（上限是每局，不是账号全局）', () => {
+  const s = playing();
+  grantGems(s); grantGems(s);
+  assert.equal(grantGems(s).ok, false);
+  resetMatch(s);
+  assert.equal(s.stats.gemsGranted, 0);
+  assert.equal(s.gems, C.gems.starting);
+  assert.equal(grantGems(s).ok, true, '新的一局应重新有 2 次');
+  assert.equal(s.gems, C.gems.starting + C.gems.grantAmount);
 });
 
 test('canAfford 把宝石按 1:1 折算进购买力', () => {
@@ -132,11 +158,18 @@ test('金币和宝石都为空时明确提示去领宝石', () => {
   assert.match(u.reason, /宝石/);
 });
 
-test('钱不够就再领一次：宝石无限，买满最贵兵种与全部升级', () => {
+test('有限宝石仍够买满最贵兵种与全部升级（初始赠送 + 2 次领取）', () => {
   const s = playing();
   s.gold = 0;
-  s.gems = 0;
-  const topUp = (amount) => { while (!canAfford(s, amount)) grantGems(s); };
+  const budget = s.gems + C.gems.grantLimit * C.gems.grantAmount;
+  const need = C.units.wizard.cost + C.upgrade.maxLevel * C.upgrade.cost;
+  assert.ok(budget >= need, `预算 ${budget} 应覆盖 ${need}`);
+  const topUp = (amount) => {
+    while (!canAfford(s, amount)) {
+      const r = grantGems(s);
+      if (!r.ok) break;              // 上限到了就停，不能死循环
+    }
+  };
   topUp(C.units.wizard.cost);
   assert.equal(spawnPlayer(s, 'wizard').ok, true);
   for (let i = 0; i < C.upgrade.maxLevel; i++) {
@@ -144,7 +177,7 @@ test('钱不够就再领一次：宝石无限，买满最贵兵种与全部升�
     assert.equal(doUpgrade(s, 'giant', 'def').ok, true, `第 ${i + 1} 级升级不该因缺钱失败`);
   }
   assert.equal(s.upgrades.giant.def, C.upgrade.maxLevel);
-  assert.ok(s.stats.gemsGranted > 1, '确实触发了多次免费领取，没有总量上限');
+  assert.ok(s.stats.gemsGranted <= C.gems.grantLimit, '没有超过每局上限');
   assert.ok(s.gems >= 0, '宝石余额不会被扣成负数');
 });
 

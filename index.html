@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#1e1e1e">
 <link rel="icon" href="data:,">
 <title>火柴人战争</title>
-<link rel="stylesheet" href="./styles/main.css?v=2.10.0">
+<link rel="stylesheet" href="./styles/main.css?v=2.11.0">
 </head>
 <body>
 
@@ -20,13 +20,14 @@
   </label>
   <button class="menuBtn" id="startBtn" disabled>开始战斗</button>
   <button class="menuBtn ghost" id="helpBtn">玩法说明</button>
-  <p class="hint" id="menuHint">底栏「领宝石」免费无限领，可当金币花 · 1–7 出兵 · A/D/G 攻守驻 · P 暂停 · Esc 后退</p>
+  <button class="menuBtn ghost" id="statsBtn">战绩存档</button>
+  <p class="hint" id="menuHint">底栏「领宝石」每局 2 次，可当金币花 · 1–7 出兵 · A/D/G 攻守驻 · P 暂停 · Esc 后退</p>
 </div>
 
 <div id="gameUI" hidden>
   <div id="topBar">
     <span>金币 <b id="gold">200</b></span>
-    <span class="gemBadge" id="gemBadge" title="宝石免费、可无限领取；金币不足时自动 1:1 抵扣，直接当金币用">
+    <span class="gemBadge" id="gemBadge" title="每局免费领 2 次；金币不足时自动 1:1 抵扣，直接当金币用">
       <span class="gemLabel">宝石</span> <b id="gems">999</b>
     </span>
     <span>人口 <b id="pop">0</b>/<b id="popMax">20</b></span>
@@ -34,6 +35,7 @@
     <span class="enemy">敌方 <b id="enemyHp">1600</b></span>
     <span class="enemyDev" id="aiDev" title="敌方矿工 / 科技 / 金币">敌方发育 —</span>
     <span class="assetBadge" id="assetBadge" title="已加载的位图素材数">位图 —</span>
+    <span class="ammoBadge" id="ammoBadge" title="当前箭矢，底栏可切换">普通箭</span>
     <span class="clock" id="clock">00:00</span>
   </div>
 
@@ -44,6 +46,7 @@
     <button class="smallBtn defendBtn" id="defendBtn" aria-pressed="true">固守</button>
     <button class="smallBtn fortBtn" id="garrisonBtn" aria-pressed="false">驻堡</button>
     <button class="smallBtn" id="pauseBtn" aria-pressed="false">暂停</button>
+    <button class="smallBtn" id="audioBtn" aria-pressed="true" title="程序合成音效开关">音效 开</button>
     <button class="smallBtn camBtn" id="camLeft" aria-label="视角左移" title="视角左移 / 拖动战场">◀</button>
     <button class="smallBtn camBtn" id="camRight" aria-label="视角右移" title="视角右移 / 拖动战场">▶</button>
     <button class="smallBtn camBtn" id="camFollow" aria-pressed="true" title="镜头跟随我方前锋">跟随</button>
@@ -62,7 +65,8 @@
   <div id="queueStrip" aria-label="训练队列"></div>
 
   <div id="bottomBar">
-    <button class="toolBtn gemBtn" id="gemBtn" aria-label="免费领取宝石" title="免费无限领取宝石，可当金币使用"><span>领宝石</span></button>
+    <button class="toolBtn gemBtn" id="gemBtn" aria-label="领取宝石（每局最多 2 次）" title="每局免费领取 2 次，可当金币使用"><span id="gemBtnLabel">领宝石 0/2</span></button>
+    <button class="toolBtn ammoBtn" id="ammoBtn" aria-label="打开箭矢切换"><span>箭矢</span></button>
     <button class="toolBtn" id="shopBtn" aria-label="打开兵种商店"><span>商店</span></button>
     <button class="toolBtn" id="upgradeBtn" aria-label="打开升级面板"><span>升级</span></button>
     <div id="unitBar" role="group" aria-label="出兵"></div>
@@ -85,11 +89,26 @@
     <button class="closeBtn" id="closeUpgrade">关闭升级</button>
   </section>
 
+  <section id="ammoPanel" hidden aria-label="箭矢切换面板">
+    <button class="panelClose" id="closeAmmoX" type="button" aria-label="关闭箭矢面板" title="关闭（Esc）">×</button>
+    <h2>箭矢切换 <span class="panelHint">全局生效于我方弓箭手与城堡射手 · 每次 60 金币（可用宝石）</span></h2>
+    <div class="shopGrid" id="ammoGrid"></div>
+    <button class="closeBtn" id="closeAmmo">关闭箭矢</button>
+  </section>
+
+  <section id="statsPanel" hidden aria-label="战绩存档面板">
+    <button class="panelClose" id="closeStatsX" type="button" aria-label="关闭战绩面板" title="关闭（Esc）">×</button>
+    <h2>战绩存档 <span class="panelHint">保存在本机浏览器，清空不可恢复</span></h2>
+    <div id="statsBody" class="statsBody"></div>
+    <button class="closeBtn ghostBtn" id="clearStats" type="button">清空战绩</button>
+    <button class="closeBtn" id="closeStats">关闭战绩</button>
+  </section>
+
   <div id="pauseOverlay" hidden></div>
 </div>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script type="module" src="./src/main.js?v=2.10.0"></script>
+<script type="module" src="./src/main.js?v=2.11.0"></script>
 </body>
 </html>
